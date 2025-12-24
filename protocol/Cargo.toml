@@ -1,0 +1,8 @@
+[package]
+name = "avi-p2p-protocol"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde_bytes = "0.11.19"
+serde = { version = "1.0", default-features = false, features = ["derive"] }

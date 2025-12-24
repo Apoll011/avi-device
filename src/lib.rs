@@ -17,6 +17,7 @@ mod protocols;
 mod runtime;
 mod error;
 mod context;
+mod bridge;
 
 // Re-export public types
 pub use config::AviP2pConfig;
