@@ -1,10 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
-// Removed unused imports
-
-use tokio::sync::{mpsc};
+use tokio::sync::mpsc;
 use futures::StreamExt;
-use tracing::{info};
+use tracing::{info, warn}; // Added warn
 
 use libp2p::{
     Swarm,
@@ -105,6 +103,7 @@ impl Runtime {
     }
 
     async fn handle_command(&mut self, cmd: Command) {
+        // ... (No changes in handle_command, keeping existing logic) ...
         match cmd {
             Command::Subscribe { topic, respond_to } => {
                 let topic_hash = gossipsub::IdentTopic::new(&topic);
@@ -211,8 +210,6 @@ impl Runtime {
                 if !self.started {
                     self.started = true;
                     let local_peer_id = *self.swarm.local_peer_id();
-                    // We send just this address, or we could gather them.
-                    // Usually the first one is sufficient for the "Started" event.
                     let _ = self.event_tx.send(AviEvent::Started {
                         local_peer_id: PeerId::from(local_peer_id),
                         listen_addresses: vec![address.to_string()],
@@ -223,10 +220,19 @@ impl Runtime {
             #[cfg(not(target_arch = "wasm32"))]
             SwarmEvent::Behaviour(AviBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
-                    self.swarm.behaviour_mut().kad.add_address(&peer_id, multiaddr);
+                    // 1. Add to Kademlia so we remember them
+                    self.swarm.behaviour_mut().kad.add_address(&peer_id, multiaddr.clone());
+
+                    // 2. CRITICAL CHANGE: Force dial immediately to establish connection
+                    // This ensures "plug-and-play" connectivity without waiting for gossipsub mesh formation
+                    if let Err(_e) = self.swarm.dial(multiaddr) {
+                        // It's normal for dials to fail sometimes (e.g. redundant connections), mostly ignore
+                    }
+
                     self.emit_peer_discovered(peer_id).await;
                 }
             }
+
             SwarmEvent::Behaviour(AviBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
                 self.emit_peer_discovered(peer_id).await;
                 for addr in info.listen_addrs {
@@ -263,6 +269,7 @@ impl Runtime {
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 self.peers.remove(&peer_id);
+                // Clean up streams associated with this peer
                 let ids_to_remove: Vec<u64> = self.streams.iter()
                     .filter(|(_, state)| state.peer == peer_id)
                     .map(|(id, _)| *id)
@@ -285,6 +292,7 @@ impl Runtime {
         }
     }
 
+    // Audio message handling (unchanged)
     async fn handle_audio_message(&mut self, peer: LibPeerId, msg: AudioStreamMessage) {
         let peer_wrap = PeerId::from(peer);
 

@@ -3,55 +3,32 @@ use tokio::io::{self, AsyncBufReadExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = std::env::args().collect();
+    // Zero-config: Default settings enable mDNS
+    let config = AviP2pConfig::default();
 
-    let mut config = AviP2pConfig::default();
-
-    // We enable mDNS, but we also support explicit arguments for robustness
-    config.enable_mdns = true;
-
-    if args.len() > 1 {
-        let peer_addr = args[1].clone();
-        config.bootstrap_peers.push(peer_addr.clone());
-        println!("🚀 Bootstrapping to peer: {}", peer_addr);
-    }
+    println!("🚀 Starting AVI P2P Node...");
+    println!("   Scanning local network for peers (mDNS)...");
 
     let (node, mut event_rx) = AviP2p::start(config).await?;
     let handle = node.handle();
 
-    // 3. Event Loop
+    // Event Loop
     tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
-                AviEvent::Started { local_peer_id, listen_addresses } => {
-                    println!("\n✅ NODE STARTED");
-                    println!("   ID: {}", local_peer_id);
-
-                    let mut found_robust_addr = false;
-
-                    println!("   Listening on:");
-                    for addr in &listen_addresses {
-                        println!("    - {}", addr);
-                        // Filter specifically for 127.0.0.1 for the easy copy-paste command.
-                        // This bypasses issues where 0.0.0.0 resolves to a LAN IP blocked by firewall.
-                        if addr.contains("127.0.0.1") {
-                            println!("\n📋 TO CONNECT TERMINAL 2, RUN:");
-                            println!("   cargo run --example simple_node -- {}/p2p/{}", addr, local_peer_id);
-                            found_robust_addr = true;
-                        }
-                    }
-
-                    if !found_robust_addr && !listen_addresses.is_empty() {
-                        // Fallback if 127.0.0.1 isn't strictly listed (rare, but happens)
-                        println!("\n📋 TO CONNECT TERMINAL 2, RUN:");
-                        println!("   cargo run --example simple_node -- {}/p2p/{}", listen_addresses[0], local_peer_id);
-                    }
+                AviEvent::Started { local_peer_id, .. } => {
+                    println!("✅ Node Online: {}", local_peer_id);
                 },
                 AviEvent::PeerDiscovered { peer_id } => {
-                    println!("👀 Discovered Peer (mDNS/DHT): {}", peer_id);
+                    // This triggers when mDNS finds someone.
+                    // The runtime now Auto-Dials, so a Connected event should follow shortly.
+                    println!("🔎 Found Peer: {}", peer_id);
                 },
-                AviEvent::PeerConnected { peer_id, address } => {
-                    println!("🔗 PEER CONNECTED: {} ({})", peer_id, address);
+                AviEvent::PeerConnected { peer_id, .. } => {
+                    println!("🔗 CONNECTED to {}", peer_id);
+                },
+                AviEvent::PeerDisconnected { peer_id } => {
+                    println!("🔌 Disconnected from {}", peer_id);
                 },
                 AviEvent::Message { from, topic, data } => {
                     let msg = String::from_utf8_lossy(&data);
@@ -62,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    println!("commands: 'sub <topic>', 'pub <topic> <msg>'");
+    println!("\nCommands: 'sub <topic>', 'pub <topic> <msg>', 'peers'");
 
     let mut stdin = io::BufReader::new(io::stdin()).lines();
     while let Ok(Some(line)) = stdin.next_line().await {
@@ -83,6 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let peers = handle.connected_peers().await?;
                 println!("Connected peers: {:?}", peers);
             },
+            "quit" => break,
             _ => println!("Unknown command"),
         }
     }
