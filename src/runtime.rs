@@ -229,9 +229,15 @@ impl Runtime {
                         self.topics.insert("avi-context-updates".to_string());
                     }
 
-                    if let Err(e) = self.swarm.behaviour_mut().gossipsub.publish(topic, data) {
-                        let _ = respond_to.send(Err(AviP2pError::NetworkError(e.to_string())));
-                        return;
+                    match self.swarm.behaviour_mut().gossipsub.publish(topic, data) {
+                        Ok(_) => {}, // Success
+                        Err(gossipsub::PublishError::InsufficientPeers) => {
+                           info!("Context updated locally (broadcasting postponed: no peers yet)");
+                        },
+                        Err(e) => {
+                            let _ = respond_to.send(Err(AviP2pError::NetworkError(e.to_string())));
+                            return;
+                        }
                     }
                 }
 
