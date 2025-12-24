@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Simulate a Double Click Button
         println!("👉 [MCU] User Double-Clicked Button 1");
-        mcu.button_pressed(1, PressType::Double).await.unwrap();
+        mcu.button_pressed(1, PressType::Double).await?;
 
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
