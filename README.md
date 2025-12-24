@@ -38,7 +38,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-avi-p2p = { git = "https://github.com/yourusername/avi-p2p" }
+avi-p2p = { git = "https://github.com/apoll011/avi-p2p" }
 tokio = { version = "1", features = ["full"] }
 ```
 
