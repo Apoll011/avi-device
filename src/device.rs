@@ -63,8 +63,7 @@ impl AviDevice {
                 let is_core = if let AviDeviceType::CORE = self.config.device_type { true } else { false };
 
                 if !(is_core && self.get_ctx("avi.core").await.is_err()) {
-                    println!("AVI Core already initialized");
-                    return;
+                    panic!("AVI Core already initialized");
                 }
 
                 match self.update_ctx("avi.core", serde_json::Value::String(local_peer_id.to_string())).await {
