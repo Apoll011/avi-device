@@ -163,6 +163,18 @@ impl Runtime {
                 };
                 let _ = respond_to.send(res);
             }
+            Command::RejectStream { stream_id, reason, respond_to } => {
+                let res = if let Some(state) = self.streams.remove(&stream_id.0) {
+                    self.swarm.behaviour_mut().stream.send_request(
+                        &state.peer,
+                        StreamMessage::RejectStream { stream_id: stream_id.0, reason }
+                    );
+                    Ok(())
+                } else {
+                    Err(AviP2pError::StreamNotFound(stream_id))
+                };
+                let _ = respond_to.send(res);
+            }
             Command::SendStreamData { stream_id, data, respond_to } => {
                 let res = if let Some(state) = self.streams.get(&stream_id.0) {
                     self.swarm.behaviour_mut().stream.send_request(
@@ -405,6 +417,15 @@ impl Runtime {
                     let _ = self.event_tx.send(AviEvent::StreamAccepted {
                         peer_id: peer_wrap,
                         stream_id: StreamId(stream_id),
+                    }).await;
+                }
+            }
+            StreamMessage::RejectStream { stream_id, reason } => {
+                if let Some(_state) = self.streams.remove(&stream_id) {
+                    let _ = self.event_tx.send(AviEvent::StreamRejected {
+                        peer_id: peer_wrap,
+                        stream_id: StreamId(stream_id),
+                        reason,
                     }).await;
                 }
             }

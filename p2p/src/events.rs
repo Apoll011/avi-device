@@ -81,6 +81,12 @@ pub enum AviEvent {
         stream_id: StreamId,
     },
 
+    StreamRejected {
+        peer_id: PeerId,
+        stream_id: StreamId,
+        reason: String,
+    },
+
     StreamData {
         from: PeerId,
         stream_id: StreamId,

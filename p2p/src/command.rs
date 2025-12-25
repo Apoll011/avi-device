@@ -30,6 +30,11 @@ pub enum Command {
         stream_id: StreamId,
         respond_to: oneshot::Sender<Result<(), AviP2pError>>
     },
+    RejectStream {
+        stream_id: StreamId,
+        reason: String,
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+    },
     SendStreamData {
         stream_id: StreamId,
         data: Vec<u8>,

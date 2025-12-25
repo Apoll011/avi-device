@@ -93,6 +93,7 @@ impl AviDevice {
 
             AviEvent::StreamRequested { from, stream_id, reason } => {},
             AviEvent::StreamAccepted { peer_id, stream_id } => {},
+            AviEvent::StreamRejected { peer_id, stream_id, reason } => {},
             AviEvent::StreamData { from, stream_id, data } => {},
             AviEvent::StreamClosed { peer_id, stream_id, reason } => {},
         };
