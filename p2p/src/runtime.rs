@@ -46,6 +46,8 @@ enum StreamStatus {
 struct StreamState {
     peer: LibPeerId,
     #[allow(dead_code)]
+    reason: String,
+    #[allow(dead_code)]
     status: StreamStatus,
     #[allow(dead_code)]
     direction: StreamDirection,
@@ -162,15 +164,16 @@ impl Runtime {
                 };
                 let _ = respond_to.send(res);
             }
-            Command::RequestStream { peer_id, respond_to } => {
+            Command::RequestStream { peer_id, reason, respond_to } => {
                 let res = if let Ok(target) = LibPeerId::try_from(peer_id.clone()) {
                     let id = generate_stream_id();
                     self.streams.insert(id.0, StreamState {
                         peer: target,
+                        reason: reason.clone(),
                         status: StreamStatus::Requested,
                         direction: StreamDirection::Outbound,
                     });
-                    self.swarm.behaviour_mut().stream.send_request(&target, StreamMessage::RequestStream { stream_id: id.0 });
+                    self.swarm.behaviour_mut().stream.send_request(&target, StreamMessage::RequestStream { stream_id: id.0, reason });
                     Ok(id)
                 } else {
                     Err(AviP2pError::PeerNotFound(peer_id))
@@ -413,14 +416,16 @@ impl Runtime {
     async fn handle_stream_message(&mut self, peer: LibPeerId, msg: StreamMessage) {
         let peer_wrap = PeerId::from(peer);
         match msg {
-            StreamMessage::RequestStream { stream_id } => {
+            StreamMessage::RequestStream { stream_id, reason } => {
                 self.streams.insert(stream_id, StreamState {
                     peer,
+                    reason: reason.clone(),
                     status: StreamStatus::Requested,
                     direction: StreamDirection::Inbound,
                 });
                 let _ = self.event_tx.send(AviEvent::StreamRequested {
                     from: peer_wrap,
+                    reason,
                     stream_id: StreamId(stream_id),
                 }).await;
             }

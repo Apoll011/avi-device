@@ -91,7 +91,7 @@ impl AviDevice {
 
             AviEvent::ContextUpdated {peer_id, context} => {},
 
-            AviEvent::StreamRequested { from, stream_id } => {},
+            AviEvent::StreamRequested { from, stream_id, reason } => {},
             AviEvent::StreamAccepted { peer_id, stream_id } => {},
             AviEvent::StreamData { from, stream_id, data } => {},
             AviEvent::StreamClosed { peer_id, stream_id, reason } => {},

@@ -48,10 +48,11 @@ impl<'a, S: UdpClient> AviEmbedded<'a, S> {
         Ok(())
     }
 
-    pub async fn start_stream(&mut self, id: u8, target_peer: &str) -> Result<(), S::Error> {
+    pub async fn start_stream(&mut self, id: u8, target_peer: &str, reason: &str) -> Result<(), S::Error> {
         let msg = UplinkMessage::StreamStart {
             local_stream_id: id,
             target_peer_id: target_peer,
+            reason
         };
         self.send_packet(&msg).await
     }

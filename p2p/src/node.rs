@@ -144,9 +144,9 @@ impl AviP2pHandle {
         rx.await.map_err(|_| AviP2pError::ChannelClosed)?
     }
 
-    pub async fn request_stream(&self, peer_id: PeerId) -> Result<StreamId, AviP2pError> {
+    pub async fn request_stream(&self, peer_id: PeerId, reason: String) -> Result<StreamId, AviP2pError> {
         let (tx, rx) = oneshot::channel();
-        self.command_tx.send(Command::RequestStream { peer_id, respond_to: tx })
+        self.command_tx.send(Command::RequestStream { peer_id, reason, respond_to: tx })
             .await.map_err(|_| AviP2pError::ChannelClosed)?;
         rx.await.map_err(|_| AviP2pError::ChannelClosed)?
     }

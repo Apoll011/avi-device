@@ -23,7 +23,7 @@ pub enum SensorValue {
 pub enum UplinkMessage<'a> {
     Hello { device_id: u64 },
 
-    StreamStart { local_stream_id: u8, target_peer_id: &'a str },
+    StreamStart { local_stream_id: u8, target_peer_id: &'a str, reason: &'a str },
     StreamData { local_stream_id: u8, #[serde(with = "serde_bytes")] data: &'a [u8] },
     StreamClose { local_stream_id: u8 },
 

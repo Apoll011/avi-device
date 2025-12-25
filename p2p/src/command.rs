@@ -22,6 +22,7 @@ pub enum Command {
 
     RequestStream {
         peer_id: PeerId,
+        reason: String,
         respond_to: oneshot::Sender<Result<StreamId, AviP2pError>>
     },
     AcceptStream {

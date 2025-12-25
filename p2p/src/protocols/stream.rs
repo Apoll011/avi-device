@@ -7,7 +7,7 @@ use crate::events::StreamId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StreamMessage {
-    RequestStream { stream_id: u64 },
+    RequestStream { stream_id: u64, reason: String },
     AcceptStream { stream_id: u64 },
     RejectStream { stream_id: u64, reason: String },
     StreamData { stream_id: u64, data: Vec<u8> },
@@ -17,7 +17,7 @@ pub enum StreamMessage {
 impl StreamMessage {
     pub fn stream_id(&self) -> StreamId {
         match self {
-            Self::RequestStream { stream_id } => StreamId(*stream_id),
+            Self::RequestStream { stream_id, .. } => StreamId(*stream_id),
             Self::AcceptStream { stream_id } => StreamId(*stream_id),
             Self::RejectStream { stream_id, .. } => StreamId(*stream_id),
             Self::StreamData { stream_id, .. } => StreamId(*stream_id),

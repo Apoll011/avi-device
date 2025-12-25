@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // --- Audio Logic ---
 
                 // Case A: Someone is calling us
-                AviEvent::StreamRequested { from, stream_id } => {
+                AviEvent::StreamRequested { from, stream_id, reason } => {
                     println!("\n📞 INCOMING CALL from {} (Stream {})", from, stream_id);
                     println!("   Auto-accepting call...");
 
@@ -132,10 +132,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if parts.is_empty() { continue; }
 
         match parts[0] {
-            "call" if parts.len() > 1 => {
+            "call" if parts.len() > 2 => {
                 let target = PeerId::new(parts[1]);
                 println!("📞 Dialing {}...", target);
-                match handle.request_stream(target).await {
+                match handle.request_stream(target,  parts[2].to_string()).await {
                     Ok(id) => println!("   Request sent. Stream ID: {}", id),
                     Err(e) => eprintln!("   Failed to request call: {}", e),
                 }

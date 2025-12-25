@@ -85,7 +85,7 @@ impl EmbeddedBridge {
                 }
             },
 
-            UplinkMessage::StreamStart { local_stream_id, target_peer_id } => {
+            UplinkMessage::StreamStart { local_stream_id, target_peer_id, reason } => {
                 if let Some(session) = sessions_lock.get_mut(&addr) {
                     if target_peer_id.is_empty() {
                         println!("Device requested stream with no target.");
@@ -95,7 +95,7 @@ impl EmbeddedBridge {
                     let peer_id = PeerId::new(target_peer_id);
                     println!("Bridging Stream {} -> Mesh Peer {}", local_stream_id, peer_id);
 
-                    match handle.request_stream(peer_id).await {
+                    match handle.request_stream(peer_id, reason.to_string()).await {
                         Ok(mesh_stream_id) => {
                             session.active_streams.insert(local_stream_id, mesh_stream_id);
                         },

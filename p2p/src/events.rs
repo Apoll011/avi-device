@@ -80,6 +80,7 @@ pub enum AviEvent {
     //  streaming
     StreamRequested {
         from: PeerId,
+        reason: String,
         stream_id: StreamId,
     },
 
