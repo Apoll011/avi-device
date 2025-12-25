@@ -144,7 +144,7 @@ impl EmbeddedBridge {
                 if let Some(session) = sessions_lock.get(&addr) {
                     let dev_id = session.device_id;
 
-                    let topic = format!("sensor_update/device_{}/", dev_id);
+                    let topic = format!("sensor_update/device_{}/{}", dev_id, sensor_name);
                     
                     let val = match data {
                         avi_p2p_protocol::SensorValue::Temperature(v) => json!(v),
@@ -183,8 +183,6 @@ impl EmbeddedBridge {
                         }
                         Err(e) => eprintln!("Failed to get current context: {}", e),
                     }
-
-                    // TODO: Update the CRDT Context automatically
                 }
             }
         }
