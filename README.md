@@ -27,7 +27,7 @@ Add `avi-device` and `tokio` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-avi-device = { git = "https://github.com/apoll011/avi-p2p" }
+avi-device = { git = "https://github.com/apoll011/avi-device" }
 tokio = { version = "1", features = ["full"] }
 ```
 
