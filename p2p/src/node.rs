@@ -64,7 +64,7 @@ impl AviP2p {
                 )
             })
             .map_err(|e| AviP2pError::NetworkError(e.to_string()))?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(86400)))
             .build();
 
 
