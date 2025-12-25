@@ -3,6 +3,7 @@
 pub mod device;
 mod capability;
 mod query;
+mod stream;
 
 pub use capability::DeviceCapabilities;
 pub use query::DeviceQuery;

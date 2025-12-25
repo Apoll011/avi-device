@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-use std::fmt::format;
+use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
-use avi_p2p::{AviEvent, AviP2p, AviP2pConfig, AviP2pError, AviP2pHandle, PeerId};
+use avi_p2p::{AviEvent, AviP2p, AviP2pConfig, AviP2pError, AviP2pHandle, PeerId, StreamId};
 use crate::capability::DeviceCapabilities;
 use crate::DeviceQuery;
+use crate::stream::{StreamDispatcher, StreamHandlerFactory};
 
 pub enum AviDeviceType {
     CORE = 0,
@@ -26,25 +27,24 @@ pub struct AviDeviceConfig {
 pub struct AviDevice {
     config: AviDeviceConfig,
 
-    p2p_config: AviP2pConfig,
     node: AviP2p,
     events: Receiver<AviEvent>,
     handler: AviP2pHandle,
 
     peer_id: Option<PeerId>,
 
+    stream_dispatcher: StreamDispatcher,
+
     subscription_handlers: HashMap<String, Box<dyn Fn(PeerId, String, Vec<u8>)>>,
 }
 
 impl AviDevice {
     pub async fn new(config: AviDeviceConfig) -> Result<Self, String> {
-        let p2p_config = AviP2pConfig::new(&config.node_name);
-
-        match AviP2p::start(p2p_config.clone()).await {
+        match AviP2p::start(AviP2pConfig::new(&config.node_name)).await {
             Ok((node, events)) => Ok(Self {
                 config,
-                p2p_config,
                 handler: node.handle(),
+                stream_dispatcher: StreamDispatcher::new(node.handle()),
                 node,
                 events,
                 peer_id: None,
@@ -91,11 +91,34 @@ impl AviDevice {
 
             AviEvent::ContextUpdated {peer_id, context} => {},
 
-            AviEvent::StreamRequested { from, stream_id, reason } => {},
-            AviEvent::StreamAccepted { peer_id, stream_id } => {},
-            AviEvent::StreamRejected { peer_id, stream_id, reason } => {},
-            AviEvent::StreamData { from, stream_id, data } => {},
-            AviEvent::StreamClosed { peer_id, stream_id, reason } => {},
+            AviEvent::StreamRejected { peer_id, stream_id, reason } => {
+                if let Err(e) = self.stream_dispatcher.handle_stream_rejected(peer_id, stream_id, reason).await {
+                    eprintln!("Error handling stream rejected: {}", e);
+                }
+            },
+            AviEvent::StreamRequested { from, stream_id, reason } => {
+                if let Err(e) = self.stream_dispatcher.handle_stream_requested(from, stream_id, reason).await {
+                    eprintln!("Error handling stream request: {}", e);
+                }
+            }
+
+            AviEvent::StreamAccepted { peer_id, stream_id } => {
+                if let Err(e) = self.stream_dispatcher.handle_stream_accepted(peer_id, stream_id).await {
+                    eprintln!("Error handling stream accepted: {}", e);
+                }
+            }
+
+            AviEvent::StreamData { from, stream_id, data } => {
+                if let Err(e) = self.stream_dispatcher.handle_stream_data(from, stream_id, data).await {
+                    eprintln!("Error handling stream data: {}", e);
+                }
+            }
+
+            AviEvent::StreamClosed { peer_id, stream_id, reason } => {
+                if let Err(e) = self.stream_dispatcher.handle_stream_closed(peer_id, stream_id, reason).await {
+                    eprintln!("Error handling stream closed: {}", e);
+                }
+            }
         };
     }
     fn set_nested_value(data: &mut serde_json::Value, path: &str, new_value: serde_json::Value) -> Result<(), AviP2pError> {
@@ -206,5 +229,20 @@ impl AviDevice {
             Ok(v) => Ok(serde_json::from_value(v).expect("Failed to deserialize core peer id")),
             Err(e) => Err(e)
         }
+    }
+
+    pub async fn registe_stream_handler<F>(&self, reason: String, factory: F)
+    where
+        F: StreamHandlerFactory + 'static,
+    {
+        self.stream_dispatcher.register_handler(reason, factory).await;
+    }
+
+    pub async fn request_stream(&self, peer_id: PeerId, reason: String) -> Result<StreamId, String> {
+        self.stream_dispatcher.request_stream(peer_id, reason).await
+    }
+
+    pub async fn close_stream(&self, stream_id: StreamId) -> Result<(), String> {
+        self.stream_dispatcher.close_stream(stream_id).await
     }
 }
