@@ -251,4 +251,12 @@ impl AviDevice {
         self.handler.send_stream_data(stream_id, data).await
             .map_err(|e| e.to_string())
     }
+
+    pub async fn get_id(&self) -> PeerId {
+        self.peer_id.read().await.clone().unwrap()
+    }
+
+    pub fn get_config(&self) -> Arc<AviDeviceConfig> {
+        self.config.clone()
+    }
 }
