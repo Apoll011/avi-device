@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use futures::future::BoxFuture;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{RwLock, Mutex};
 use avi_p2p::{set_nested_value, AviEvent, AviP2p, AviP2pConfig, AviP2pError, AviP2pHandle, BridgeConfig, EmbeddedBridge, PeerId, StreamId};
@@ -42,7 +43,11 @@ pub struct AviDevice {
 
     stream_dispatcher: Arc<StreamDispatcher>,
 
-    subscription_handlers: Arc<RwLock<HashMap<String, Arc<dyn Fn(PeerId, String, Vec<u8>) + Send + Sync>>>>,
+    subscription_handlers: Arc<RwLock<HashMap<String, Arc<dyn Fn(PeerId, String, Vec<u8>) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    on_started: Arc<RwLock<Option<Arc<dyn Fn(PeerId, Vec<String>) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    on_peer_discovered: Arc<RwLock<Option<Arc<dyn Fn(PeerId) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    on_peer_connected: Arc<RwLock<Option<Arc<dyn Fn(PeerId, String) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    on_peer_disconnected: Arc<RwLock<Option<Arc<dyn Fn(PeerId) -> BoxFuture<'static, ()> + Send + Sync>>>>,
 }
 
 impl AviDevice {
@@ -67,6 +72,10 @@ impl AviDevice {
                     events: Arc::new(Mutex::new(Some(events))),
                     peer_id: Arc::new(RwLock::new(None)),
                     subscription_handlers: Arc::new(RwLock::new(HashMap::new())),
+                    on_started: Arc::new(RwLock::new(None)),
+                    on_peer_discovered: Arc::new(RwLock::new(None)),
+                    on_peer_connected: Arc::new(RwLock::new(None)),
+                    on_peer_disconnected: Arc::new(RwLock::new(None)),
                 })
             },
             Err(e) => Err(format!("Failed to start AVI P2P node: {}", e))
@@ -75,7 +84,7 @@ impl AviDevice {
 
     async fn handle_event(&self, event: AviEvent) {
         match event {
-            AviEvent::Started { local_peer_id, .. } => {
+            AviEvent::Started { local_peer_id, listen_addresses } => {
                 {
                     let mut id = self.peer_id.write().await;
                     *id = Some(local_peer_id.clone());
@@ -94,23 +103,43 @@ impl AviDevice {
                         // Already exists, maybe log it
                     }
                 }
+
+                let handler = self.on_started.read().await;
+                if let Some(handler) = &*handler {
+                    handler(local_peer_id, listen_addresses).await;
+                }
             },
 
-            AviEvent::PeerDiscovered { .. } => {},
-            AviEvent::PeerConnected { .. } => {
+            AviEvent::PeerDiscovered { peer_id } => {
+                let handler = self.on_peer_discovered.read().await;
+                if let Some(handler) = &*handler {
+                    handler(peer_id).await;
+                }
+            },
+            AviEvent::PeerConnected { peer_id, address } => {
                 let local_id = {
                     self.peer_id.read().await.clone()
                 };
                 if let Some(local_peer_id) = local_id {
                     self.update_capabilities(local_peer_id.to_string()).await;
                 }
+
+                let handler = self.on_peer_connected.read().await;
+                if let Some(handler) = &*handler {
+                    handler(peer_id, address).await;
+                }
             },
-            AviEvent::PeerDisconnected { .. } => {},
+            AviEvent::PeerDisconnected { peer_id } => {
+                let handler = self.on_peer_disconnected.read().await;
+                if let Some(handler) = &*handler {
+                    handler(peer_id).await;
+                }
+            },
 
             AviEvent::Message { from, topic, data } => {
                 let handlers = self.subscription_handlers.read().await;
                 if let Some(handler) = handlers.get(&topic) {
-                    handler(from, topic, data);
+                    handler(from, topic, data).await;
                 }
             },
 
@@ -183,7 +212,10 @@ impl AviDevice {
     pub async fn subscribe(&self, topic: &str, handler: impl Fn(PeerId, String, Vec<u8>) + Send + Sync + 'static) -> Result<(), AviP2pError> {
         {
             let mut handlers = self.subscription_handlers.write().await;
-            handlers.insert(topic.to_string(), Arc::new(handler));
+            handlers.insert(topic.to_string(), Arc::new(move |peer_id, topic, data| {
+                handler(peer_id, topic, data);
+                Box::pin(async {})
+            }));
         }
         self.handler.subscribe(topic).await
     }
@@ -195,14 +227,9 @@ impl AviDevice {
     {
         {
             let mut handlers = self.subscription_handlers.write().await;
-            let handler = Arc::new(handler);
-            let wrapper: Arc<dyn Fn(PeerId, String, Vec<u8>) + Send + Sync> = Arc::new(move |peer_id, topic, data| {
-                let handler = handler.clone();
-                tokio::spawn(async move {
-                    handler(peer_id, topic, data).await;
-                });
-            });
-            handlers.insert(topic.to_string(), wrapper);
+            handlers.insert(topic.to_string(), Arc::new(move |peer_id, topic, data| {
+                Box::pin(handler(peer_id, topic, data))
+            }));
         }
         self.handler.subscribe(topic).await
     }
@@ -258,5 +285,49 @@ impl AviDevice {
 
     pub fn get_config(&self) -> Arc<AviDeviceConfig> {
         self.config.clone()
+    }
+
+    pub async fn on_started<F, Fut>(&self, handler: F)
+    where
+        F: Fn(PeerId, Vec<String>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let mut lock = self.on_started.write().await;
+        *lock = Some(Arc::new(move |peer_id, addresses| {
+            Box::pin(handler(peer_id, addresses))
+        }));
+    }
+
+    pub async fn on_peer_discovered<F, Fut>(&self, handler: F)
+    where
+        F: Fn(PeerId) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let mut lock = self.on_peer_discovered.write().await;
+        *lock = Some(Arc::new(move |peer_id| {
+            Box::pin(handler(peer_id))
+        }));
+    }
+
+    pub async fn on_peer_connected<F, Fut>(&self, handler: F)
+    where
+        F: Fn(PeerId, String) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let mut lock = self.on_peer_connected.write().await;
+        *lock = Some(Arc::new(move |peer_id, address| {
+            Box::pin(handler(peer_id, address))
+        }));
+    }
+
+    pub async fn on_peer_disconnected<F, Fut>(&self, handler: F)
+    where
+        F: Fn(PeerId) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let mut lock = self.on_peer_disconnected.write().await;
+        *lock = Some(Arc::new(move |peer_id| {
+            Box::pin(handler(peer_id))
+        }));
     }
 }
