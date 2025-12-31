@@ -216,6 +216,36 @@ pub fn set_nested_value(data: &mut serde_json::Value, path: &str, new_value: ser
 
     Err(AviP2pError::InvalidPath("Unexpected end of path".to_string()))
 }
+
+pub fn delete_nested_value(data: &mut serde_json::Value, path: &str) -> Result<(), AviP2pError> {
+    let keys: Vec<&str> = path.split('.').collect();
+
+    if keys.is_empty() || (keys.len() == 1 && keys[0].is_empty()) {
+        *data = serde_json::Value::Object(serde_json::Map::new());
+        return Ok(());
+    }
+
+    let mut current = data;
+
+    for (i, &key) in keys.iter().enumerate() {
+        let is_last = i == keys.len() - 1;
+
+        if is_last {
+            if let Some(obj) = current.as_object_mut() {
+                obj.remove(key);
+                return Ok(());
+            } else {
+                return Err(AviP2pError::InvalidPath("Parent is not an object".to_string()));
+            }
+        } else {
+            current = current.get_mut(key)
+                .ok_or_else(|| AviP2pError::InvalidPath(format!("Failed to navigate to key: {}", key)))?;
+        }
+    }
+
+    Err(AviP2pError::InvalidPath("Unexpected end of path".to_string()))
+}
+
 fn merge_json(a: &mut serde_json::Value, b: serde_json::Value) {
     deep_merge(a, b, false);
 }
