@@ -44,10 +44,10 @@ pub struct AviDevice {
     stream_dispatcher: Arc<StreamDispatcher>,
 
     subscription_handlers: Arc<RwLock<HashMap<String, Arc<dyn Fn(PeerId, String, Vec<u8>) -> BoxFuture<'static, ()> + Send + Sync>>>>,
-    on_started: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, PeerId, Vec<String>) -> BoxFuture<'static, ()> + Send + Sync>>>>,
-    on_peer_discovered: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, PeerId) -> BoxFuture<'static, ()> + Send + Sync>>>>,
-    on_peer_connected: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, PeerId, String) -> BoxFuture<'static, ()> + Send + Sync>>>>,
-    on_peer_disconnected: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, PeerId) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    on_started: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, String, Vec<String>) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    on_peer_discovered: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, String) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    on_peer_connected: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, String, String) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    on_peer_disconnected: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, String) -> BoxFuture<'static, ()> + Send + Sync>>>>,
 }
 
 impl AviDevice {
@@ -106,14 +106,14 @@ impl AviDevice {
 
                 let handler = self.on_started.read().await;
                 if let Some(handler) = &*handler {
-                    handler(self.clone(), local_peer_id, listen_addresses).await;
+                    handler(self.clone(), local_peer_id.to_string(), listen_addresses).await;
                 }
             },
 
             AviEvent::PeerDiscovered { peer_id } => {
                 let handler = self.on_peer_discovered.read().await;
                 if let Some(handler) = &*handler {
-                    handler(self.clone(), peer_id).await;
+                    handler(self.clone(), peer_id.to_string()).await;
                 }
             },
             AviEvent::PeerConnected { peer_id, address } => {
@@ -126,13 +126,13 @@ impl AviDevice {
 
                 let handler = self.on_peer_connected.read().await;
                 if let Some(handler) = &*handler {
-                    handler(self.clone(), peer_id, address).await;
+                    handler(self.clone(), peer_id.to_string(), address).await;
                 }
             },
             AviEvent::PeerDisconnected { peer_id } => {
                 let handler = self.on_peer_disconnected.read().await;
                 if let Some(handler) = &*handler {
-                    handler(self.clone(), peer_id).await;
+                    handler(self.clone(), peer_id.to_string()).await;
                 }
             },
 
@@ -289,7 +289,7 @@ impl AviDevice {
 
     pub async fn on_started<F, Fut>(&self, handler: F)
     where
-        F: Fn(AviDevice, PeerId, Vec<String>) -> Fut + Send + Sync + 'static,
+        F: Fn(AviDevice, String, Vec<String>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
     {
         let mut lock = self.on_started.write().await;
@@ -300,7 +300,7 @@ impl AviDevice {
 
     pub async fn on_peer_discovered<F, Fut>(&self, handler: F)
     where
-        F: Fn(AviDevice, PeerId) -> Fut + Send + Sync + 'static,
+        F: Fn(AviDevice, String) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
     {
         let mut lock = self.on_peer_discovered.write().await;
@@ -311,7 +311,7 @@ impl AviDevice {
 
     pub async fn on_peer_connected<F, Fut>(&self, handler: F)
     where
-        F: Fn(AviDevice, PeerId, String) -> Fut + Send + Sync + 'static,
+        F: Fn(AviDevice, String, String) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
     {
         let mut lock = self.on_peer_connected.write().await;
@@ -322,7 +322,7 @@ impl AviDevice {
 
     pub async fn on_peer_disconnected<F, Fut>(&self, handler: F)
     where
-        F: Fn(AviDevice, PeerId) -> Fut + Send + Sync + 'static,
+        F: Fn(AviDevice, String) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
     {
         let mut lock = self.on_peer_disconnected.write().await;
