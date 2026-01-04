@@ -350,4 +350,11 @@ impl AviDevice {
             Box::pin(handler(device, peer_id))
         }));
     }
+
+    pub fn start_event_loop(self: &Arc<Self>) {
+        let device = Arc::clone(self);
+        tokio::spawn(async move {
+            device.start_event_loop().await;
+        });
+    }
 }
