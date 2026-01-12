@@ -359,3 +359,4 @@ impl AviDevice {
             device.__start_event_loop().await;
         });
     }
+}
