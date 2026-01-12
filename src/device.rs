@@ -43,7 +43,7 @@ pub struct AviDevice {
 
     stream_dispatcher: Arc<StreamDispatcher>,
 
-    subscription_handlers: Arc<RwLock<HashMap<String, Arc<dyn Fn(PeerId, String, Vec<u8>) -> BoxFuture<'static, ()> + Send + Sync>>>>,
+    subscription_handlers: Arc<RwLock<HashMap<String, Vec<Arc<dyn Fn(PeerId, String, Vec<u8>) -> BoxFuture<'static, ()> + Send + Sync>>>>>,
     on_started: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, String, Vec<String>) -> BoxFuture<'static, ()> + Send + Sync>>>>,
     on_peer_discovered: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, String) -> BoxFuture<'static, ()> + Send + Sync>>>>,
     on_peer_connected: Arc<RwLock<Option<Arc<dyn Fn(AviDevice, String, String) -> BoxFuture<'static, ()> + Send + Sync>>>>,
@@ -137,9 +137,11 @@ impl AviDevice {
             },
 
             AviEvent::Message { from, topic, data } => {
-                let handlers = self.subscription_handlers.read().await;
-                if let Some(handler) = handlers.get(&topic) {
-                    handler(from, topic, data).await;
+                let handlers_map = self.subscription_handlers.read().await;
+                if let Some(handlers) = handlers_map.get(&topic) {
+                    for handler in handlers {
+                        handler(from.clone(), topic.clone(), data.clone()).await;
+                    }
                 }
             },
 
@@ -212,7 +214,7 @@ impl AviDevice {
     pub async fn subscribe(&self, topic: &str, handler: impl Fn(PeerId, String, Vec<u8>) + Send + Sync + 'static) -> Result<(), AviP2pError> {
         {
             let mut handlers = self.subscription_handlers.write().await;
-            handlers.insert(topic.to_string(), Arc::new(move |peer_id, topic, data| {
+            handlers.entry(topic.to_string()).or_default().push(Arc::new(move |peer_id, topic, data| {
                 handler(peer_id, topic, data);
                 Box::pin(async {})
             }));
@@ -227,7 +229,7 @@ impl AviDevice {
     {
         {
             let mut handlers = self.subscription_handlers.write().await;
-            handlers.insert(topic.to_string(), Arc::new(move |peer_id, topic, data| {
+            handlers.entry(topic.to_string()).or_default().push(Arc::new(move |peer_id, topic, data| {
                 Box::pin(handler(peer_id, topic, data))
             }));
         }
@@ -357,4 +359,3 @@ impl AviDevice {
             device.__start_event_loop().await;
         });
     }
-}
