@@ -23,10 +23,17 @@ pub enum SensorValue {
 pub enum UplinkMessage<'a> {
     Hello { device_id: u64 },
 
+    // Pub/Sub
+    Subscribe { topic: &'a str },
+    Unsubscribe { topic: &'a str },
+    Publish { topic: &'a str, #[serde(with = "serde_bytes")] data: &'a [u8] },
+
+    // Streams
     StreamStart { local_stream_id: u8, target_peer_id: &'a str, reason: &'a str },
     StreamData { local_stream_id: u8, #[serde(with = "serde_bytes")] data: &'a [u8] },
     StreamClose { local_stream_id: u8 },
 
+    // Events
     ButtonPress {
         button_id: u8,
         press_type: PressType
@@ -39,7 +46,17 @@ pub enum UplinkMessage<'a> {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum DownlinkMessage {
+pub enum DownlinkMessage<'a> {
     Welcome,
     Error { reason: u8 },
+    
+    // Pub/Sub Events
+    Message { 
+        topic: &'a str, 
+        #[serde(with = "serde_bytes")] 
+        data: &'a [u8] 
+    },
+    
+    SubscribeAck { topic: &'a str },
+    UnsubscribeAck { topic: &'a str },
 }
