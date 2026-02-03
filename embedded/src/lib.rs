@@ -1,4 +1,6 @@
 #![no_std]
+#![no_main]
+use esp_idf_hal as _;
 
 extern crate alloc;
 use avi_p2p_protocol::{DownlinkMessage, PressType, SensorValue, UplinkMessage};
@@ -172,7 +174,6 @@ impl<'a, S: UdpClient, H: MessageHandler> AviEmbedded<'a, S, H> {
     }
 }
 use linked_list_allocator::LockedHeap;
-
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
