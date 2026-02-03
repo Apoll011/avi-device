@@ -1,5 +1,6 @@
 #![no_std]
 
+extern crate alloc;
 use avi_p2p_protocol::{DownlinkMessage, PressType, SensorValue, UplinkMessage};
 use core::future::Future;
 use serde::Serialize;
@@ -168,5 +169,17 @@ impl<'a, S: UdpClient, H: MessageHandler> AviEmbedded<'a, S, H> {
             self.socket.send(used_slice).await?;
         }
         Ok(())
+    }
+}
+use linked_list_allocator::LockedHeap;
+
+#[global_allocator]
+static ALLOCATOR: LockedHeap = LockedHeap::empty();
+
+fn init_heap() {
+    const HEAP_SIZE: usize = 32 * 1024;
+    static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
+    unsafe {
+        ALLOCATOR.lock().init(HEAP.as_mut_ptr(), HEAP_SIZE);
     }
 }

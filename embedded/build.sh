@@ -42,20 +42,10 @@ if ! command -v cbindgen &> /dev/null; then
     SKIP_CBINDGEN=1
 fi
 
-# Step 1: Check if target is installed
-echo ""
-echo -e "${GREEN}[1/4] Checking Rust target...${NC}"
-if ! rustup target list --installed | grep -q "$TARGET"; then
-    echo -e "${YELLOW}Target not installed. Installing...${NC}"
-    rustup target add "$TARGET"
-else
-    echo "Target already installed ✓"
-fi
-
 # Step 2: Build the Rust library
 echo ""
 echo -e "${GREEN}[2/4] Building Rust library...${NC}"
-cargo build --release --target "$TARGET" --features c-api
+cargo +esp build --release --target "$TARGET" --features c-api -Z build-std=std,panic_abort
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}Build successful ✓${NC}"
@@ -68,7 +58,7 @@ fi
 echo ""
 echo -e "${GREEN}[3/4] Generating C header...${NC}"
 if [ -z "$SKIP_CBINDGEN" ]; then
-    cbindgen --config cbindgen.toml --crate avi-embedded --output avi_embedded.h
+    cbindgen --config cbindgen.toml --crate avi-p2p-embedded --output avi_embedded.h
     echo -e "${GREEN}Header generated ✓${NC}"
 else
     echo -e "${YELLOW}Skipped (cbindgen not installed)${NC}"
