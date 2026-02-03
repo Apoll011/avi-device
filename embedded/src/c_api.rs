@@ -182,6 +182,9 @@ static mut COMMAND_QUEUE: Option<AviCommandQueue> = None;
 // Initialize the command queue (call once at startup)
 #[no_mangle]
 pub extern "C" fn avi_embedded_init() {
+    // FIX: Initialize the heap!
+    crate::init_heap();
+
     unsafe {
         if COMMAND_QUEUE.is_none() {
             COMMAND_QUEUE = Some(AviCommandQueue::new());

@@ -177,7 +177,7 @@ use linked_list_allocator::LockedHeap;
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-fn init_heap() {
+pub(crate) fn init_heap() {
     const HEAP_SIZE: usize = 32 * 1024;
     static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
     unsafe {
