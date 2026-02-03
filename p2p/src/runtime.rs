@@ -1,26 +1,20 @@
-use std::collections::{HashMap, HashSet};
-use tokio::sync::mpsc;
 use futures::StreamExt;
-use tracing::{info};
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
+use tokio::sync::mpsc;
+use tracing::info;
 
 use libp2p::{
+    gossipsub, identify, mdns, request_response, swarm::SwarmEvent, Multiaddr, PeerId as LibPeerId,
     Swarm,
-    PeerId as LibPeerId,
-    swarm::SwarmEvent,
-    gossipsub,
-    mdns,
-    identify,
-    request_response,
-    Multiaddr
 };
 
 use crate::behaviour::{AviBehaviour, AviBehaviourEvent};
 use crate::command::Command;
-use crate::events::{AviEvent, PeerId};
 use crate::error::{AviP2pError, StreamCloseReason};
+use crate::events::{AviEvent, PeerId};
+use crate::protocols::context::AviContext;
 use crate::protocols::stream::StreamMessage;
-use crate::protocols::context::{AviContext};
 use crate::{generate_stream_id, StreamDirection, StreamId, StreamState, StreamStatus};
 
 struct PeerState {
@@ -108,52 +102,84 @@ impl Runtime {
                     Ok(_) => {
                         self.topics.insert(topic);
                         Ok(())
-                    },
+                    }
                     Err(e) => Err(AviP2pError::NetworkError(e.to_string())),
                 };
                 let _ = respond_to.send(res);
             }
             Command::Unsubscribe { topic, respond_to } => {
                 let topic_hash = gossipsub::IdentTopic::new(&topic);
-                let res = match self.swarm.behaviour_mut().gossipsub.unsubscribe(&topic_hash) {
+                let res = match self
+                    .swarm
+                    .behaviour_mut()
+                    .gossipsub
+                    .unsubscribe(&topic_hash)
+                {
                     Ok(_) => {
                         self.topics.remove(&topic);
                         Ok(())
-                    },
+                    }
                     Err(e) => Err(AviP2pError::NetworkError(e.to_string())),
                 };
                 let _ = respond_to.send(res);
             }
-            Command::Publish { topic, data, respond_to } => {
+            Command::Publish {
+                topic,
+                data,
+                respond_to,
+            } => {
                 let topic_hash = gossipsub::IdentTopic::new(&topic);
-                let res = match self.swarm.behaviour_mut().gossipsub.publish(topic_hash, data) {
+                let res = match self
+                    .swarm
+                    .behaviour_mut()
+                    .gossipsub
+                    .publish(topic_hash, data)
+                {
                     Ok(_) => Ok(()),
                     Err(e) => Err(AviP2pError::NetworkError(e.to_string())),
                 };
                 let _ = respond_to.send(res);
             }
-            Command::RequestStream { peer_id, reason, respond_to } => {
+            Command::RequestStream {
+                peer_id,
+                reason,
+                respond_to,
+            } => {
                 let res = if let Ok(target) = LibPeerId::try_from(peer_id.clone()) {
                     let id = generate_stream_id();
-                    self.streams.insert(id.0, StreamState {
-                        peer: target,
-                        reason: reason.clone(),
-                        status: StreamStatus::Requested,
-                        direction: StreamDirection::Outbound,
-                    });
-                    self.swarm.behaviour_mut().stream.send_request(&target, StreamMessage::RequestStream { stream_id: id.0, reason });
+                    self.streams.insert(
+                        id.0,
+                        StreamState {
+                            peer: target,
+                            reason: reason.clone(),
+                            status: StreamStatus::Requested,
+                            direction: StreamDirection::Outbound,
+                        },
+                    );
+                    self.swarm.behaviour_mut().stream.send_request(
+                        &target,
+                        StreamMessage::RequestStream {
+                            stream_id: id.0,
+                            reason,
+                        },
+                    );
                     Ok(id)
                 } else {
                     Err(AviP2pError::PeerNotFound(peer_id))
                 };
                 let _ = respond_to.send(res);
             }
-            Command::AcceptStream { stream_id, respond_to } => {
+            Command::AcceptStream {
+                stream_id,
+                respond_to,
+            } => {
                 let res = if let Some(state) = self.streams.get_mut(&stream_id.0) {
                     state.status = StreamStatus::Accepted;
                     self.swarm.behaviour_mut().stream.send_request(
                         &state.peer,
-                        StreamMessage::AcceptStream { stream_id: stream_id.0 }
+                        StreamMessage::AcceptStream {
+                            stream_id: stream_id.0,
+                        },
                     );
                     Ok(())
                 } else {
@@ -161,11 +187,18 @@ impl Runtime {
                 };
                 let _ = respond_to.send(res);
             }
-            Command::RejectStream { stream_id, reason, respond_to } => {
+            Command::RejectStream {
+                stream_id,
+                reason,
+                respond_to,
+            } => {
                 let res = if let Some(state) = self.streams.remove(&stream_id.0) {
                     self.swarm.behaviour_mut().stream.send_request(
                         &state.peer,
-                        StreamMessage::RejectStream { stream_id: stream_id.0, reason }
+                        StreamMessage::RejectStream {
+                            stream_id: stream_id.0,
+                            reason,
+                        },
                     );
                     Ok(())
                 } else {
@@ -173,11 +206,18 @@ impl Runtime {
                 };
                 let _ = respond_to.send(res);
             }
-            Command::SendStreamData { stream_id, data, respond_to } => {
+            Command::SendStreamData {
+                stream_id,
+                data,
+                respond_to,
+            } => {
                 let res = if let Some(state) = self.streams.get(&stream_id.0) {
                     self.swarm.behaviour_mut().stream.send_request(
                         &state.peer,
-                        StreamMessage::StreamData { stream_id: stream_id.0, data }
+                        StreamMessage::StreamData {
+                            stream_id: stream_id.0,
+                            data,
+                        },
                     );
                     Ok(())
                 } else {
@@ -185,11 +225,16 @@ impl Runtime {
                 };
                 let _ = respond_to.send(res);
             }
-            Command::CloseStream { stream_id, respond_to } => {
+            Command::CloseStream {
+                stream_id,
+                respond_to,
+            } => {
                 let res = if let Some(state) = self.streams.remove(&stream_id.0) {
                     self.swarm.behaviour_mut().stream.send_request(
                         &state.peer,
-                        StreamMessage::CloseStream { stream_id: stream_id.0 }
+                        StreamMessage::CloseStream {
+                            stream_id: stream_id.0,
+                        },
                     );
                     Ok(())
                 } else {
@@ -198,9 +243,7 @@ impl Runtime {
                 let _ = respond_to.send(res);
             }
             Command::GetConnectedPeers { respond_to } => {
-                let peers = self.peers.keys()
-                    .map(|p| PeerId::from(*p))
-                    .collect();
+                let peers = self.peers.keys().map(|p| PeerId::from(*p)).collect();
                 let _ = respond_to.send(Ok(peers));
             }
             Command::DiscoverPeers { respond_to } => {
@@ -227,10 +270,10 @@ impl Runtime {
                     }
 
                     match self.swarm.behaviour_mut().gossipsub.publish(topic, data) {
-                        Ok(_) => {}, // Success
+                        Ok(_) => {} // Success
                         Err(gossipsub::PublishError::InsufficientPeers) => {
-                           info!("Context updated locally (broadcasting postponed: no peers yet)");
-                        },
+                            info!("Context updated locally (broadcasting postponed: no peers yet)");
+                        }
                         Err(e) => {
                             let _ = respond_to.send(Err(AviP2pError::NetworkError(e.to_string())));
                             return;
@@ -256,10 +299,12 @@ impl Runtime {
                     }
 
                     match self.swarm.behaviour_mut().gossipsub.publish(topic, data) {
-                        Ok(_) => {}, // Success
+                        Ok(_) => {} // Success
                         Err(gossipsub::PublishError::InsufficientPeers) => {
-                           info!("Context replaced locally (broadcasting postponed: no peers yet)");
-                        },
+                            info!(
+                                "Context replaced locally (broadcasting postponed: no peers yet)"
+                            );
+                        }
                         Err(e) => {
                             let _ = respond_to.send(Err(AviP2pError::NetworkError(e.to_string())));
                             return;
@@ -270,7 +315,10 @@ impl Runtime {
                 let _ = respond_to.send(Ok(()));
             }
 
-            Command::GetPeerContext { peer_id: _, respond_to } => {
+            Command::GetPeerContext {
+                peer_id: _,
+                respond_to,
+            } => {
                 let result = Ok(self.local_context.data.clone());
                 let _ = respond_to.send(result);
             }
@@ -283,17 +331,23 @@ impl Runtime {
                 if !self.started {
                     self.started = true;
                     let local_peer_id = *self.swarm.local_peer_id();
-                    let _ = self.event_tx.send(AviEvent::Started {
-                        local_peer_id: PeerId::from(local_peer_id),
-                        listen_addresses: vec![address.to_string()],
-                    }).await;
+                    let _ = self
+                        .event_tx
+                        .send(AviEvent::Started {
+                            local_peer_id: PeerId::from(local_peer_id),
+                            listen_addresses: vec![address.to_string()],
+                        })
+                        .await;
                 }
             }
 
             #[cfg(not(target_arch = "wasm32"))]
             SwarmEvent::Behaviour(AviBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
-                    self.swarm.behaviour_mut().kad.add_address(&peer_id, multiaddr.clone());
+                    self.swarm
+                        .behaviour_mut()
+                        .kad
+                        .add_address(&peer_id, multiaddr.clone());
                     self.known_peers.insert(peer_id, multiaddr.clone());
 
                     if !self.swarm.is_connected(&peer_id) {
@@ -304,35 +358,57 @@ impl Runtime {
                 }
             }
 
-            SwarmEvent::Behaviour(AviBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
+            SwarmEvent::Behaviour(AviBehaviourEvent::Identify(identify::Event::Received {
+                peer_id,
+                info,
+            })) => {
                 self.emit_peer_discovered(peer_id).await;
                 for addr in info.listen_addrs {
-                    self.swarm.behaviour_mut().kad.add_address(&peer_id, addr.clone());
+                    self.swarm
+                        .behaviour_mut()
+                        .kad
+                        .add_address(&peer_id, addr.clone());
 
                     self.known_peers.insert(peer_id, addr);
                 }
 
                 // Sync context if they support our protocol
-                if info.protocols.iter().any(|p| p.to_string() == "/avi/stream/1.0.0") {
+                if info
+                    .protocols
+                    .iter()
+                    .any(|p| p.to_string() == "/avi/stream/1.0.0")
+                {
                     if !self.synced_peers.contains(&peer_id) {
                         self.synced_peers.insert(peer_id);
                         self.swarm.behaviour_mut().stream.send_request(
                             &peer_id,
-                            StreamMessage::SyncContext(self.local_context.clone())
+                            StreamMessage::SyncContext(self.local_context.clone()),
                         );
                     }
                 }
             }
 
             // Connection ESTABLISHED
-            SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established, .. } => {
+            SwarmEvent::ConnectionEstablished {
+                peer_id,
+                endpoint,
+                num_established,
+                ..
+            } => {
                 if num_established.get() == 1 {
                     let addr = match endpoint {
                         libp2p::core::ConnectedPoint::Dialer { address, .. } => address.to_string(),
-                        libp2p::core::ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.to_string(),
+                        libp2p::core::ConnectedPoint::Listener { send_back_addr, .. } => {
+                            send_back_addr.to_string()
+                        }
                     };
 
-                    self.peers.insert(peer_id, PeerState { addr: Some(addr.clone()) });
+                    self.peers.insert(
+                        peer_id,
+                        PeerState {
+                            addr: Some(addr.clone()),
+                        },
+                    );
 
                     let topic = gossipsub::IdentTopic::new("avi-context-updates");
                     if !self.topics.contains("avi-context-updates") {
@@ -340,41 +416,60 @@ impl Runtime {
                         self.topics.insert("avi-context-updates".to_string());
                     }
 
-                    let _ = self.event_tx.send(AviEvent::PeerConnected {
-                        peer_id: PeerId::from(peer_id),
-                        address: addr,
-                    }).await;
+                    let _ = self
+                        .event_tx
+                        .send(AviEvent::PeerConnected {
+                            peer_id: PeerId::from(peer_id),
+                            address: addr,
+                        })
+                        .await;
                 }
             }
 
             // Connection CLOSED
-            SwarmEvent::ConnectionClosed { peer_id, num_established, .. } => {
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                num_established,
+                ..
+            } => {
                 if num_established == 0 {
                     self.peers.remove(&peer_id);
                     self.discovered_peers.remove(&peer_id);
                     self.synced_peers.remove(&peer_id);
 
-                    let ids_to_remove: Vec<u64> = self.streams.iter()
+                    let ids_to_remove: Vec<u64> = self
+                        .streams
+                        .iter()
                         .filter(|(_, state)| state.peer == peer_id)
                         .map(|(id, _)| *id)
                         .collect();
 
                     for id in ids_to_remove {
                         self.streams.remove(&id);
-                        let _ = self.event_tx.send(AviEvent::StreamClosed {
-                            peer_id: PeerId::from(peer_id),
-                            stream_id: StreamId(id),
-                            reason: StreamCloseReason::RemoteClose,
-                        }).await;
+                        let _ = self
+                            .event_tx
+                            .send(AviEvent::StreamClosed {
+                                peer_id: PeerId::from(peer_id),
+                                stream_id: StreamId(id),
+                                reason: StreamCloseReason::RemoteClose,
+                            })
+                            .await;
                     }
 
-                    let _ = self.event_tx.send(AviEvent::PeerDisconnected {
-                        peer_id: PeerId::from(peer_id),
-                    }).await;
+                    let _ = self
+                        .event_tx
+                        .send(AviEvent::PeerDisconnected {
+                            peer_id: PeerId::from(peer_id),
+                        })
+                        .await;
                 }
             }
 
-            SwarmEvent::Behaviour(AviBehaviourEvent::Gossipsub(gossipsub::Event::Message { propagation_source, message, .. })) => {
+            SwarmEvent::Behaviour(AviBehaviourEvent::Gossipsub(gossipsub::Event::Message {
+                propagation_source,
+                message,
+                ..
+            })) => {
                 let topic = message.clone().topic.into_string();
 
                 if topic == "avi-context-updates" {
@@ -383,30 +478,38 @@ impl Runtime {
 
                         if self.local_context.merge(incoming_ctx) {
                             // Notify User
-                            let _ = self.event_tx.send(AviEvent::ContextUpdated {
-                                peer_id: PeerId::new(&peer_id_str),
-                                context: self.local_context.data.clone(),
-                            }).await;
+                            let _ = self
+                                .event_tx
+                                .send(AviEvent::ContextUpdated {
+                                    peer_id: PeerId::new(&peer_id_str),
+                                    context: self.local_context.data.clone(),
+                                })
+                                .await;
                         }
                     }
                     return;
                 }
 
-                let _ = self.event_tx.send(AviEvent::Message {
-                    from: PeerId::from(propagation_source),
-                    topic: message.topic.into_string(),
-                    data: message.data,
-                }).await;
+                let _ = self
+                    .event_tx
+                    .send(AviEvent::Message {
+                        from: PeerId::from(propagation_source),
+                        topic: message.topic.into_string(),
+                        data: message.data,
+                    })
+                    .await;
             }
-            SwarmEvent::Behaviour(AviBehaviourEvent::Stream(request_response::Event::Message { peer, message })) => {
-                match message {
-                    request_response::Message::Request { request, channel, .. } => {
-                        self.handle_stream_message(peer, request).await;
-                        let _ = self.swarm.behaviour_mut().stream.send_response(channel, ());
-                    }
-                    _ => {}
+            SwarmEvent::Behaviour(AviBehaviourEvent::Stream(
+                request_response::Event::Message { peer, message },
+            )) => match message {
+                request_response::Message::Request {
+                    request, channel, ..
+                } => {
+                    self.handle_stream_message(peer, request).await;
+                    let _ = self.swarm.behaviour_mut().stream.send_response(channel, ());
                 }
-            }
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -417,59 +520,80 @@ impl Runtime {
             StreamMessage::SyncContext(incoming_ctx) => {
                 let peer_id_str = incoming_ctx.device_id.clone();
                 if self.local_context.merge(incoming_ctx) {
-                    let _ = self.event_tx.send(AviEvent::ContextUpdated {
-                        peer_id: PeerId::new(&peer_id_str),
-                        context: self.local_context.data.clone(),
-                    }).await;
+                    let _ = self
+                        .event_tx
+                        .send(AviEvent::ContextUpdated {
+                            peer_id: PeerId::new(&peer_id_str),
+                            context: self.local_context.data.clone(),
+                        })
+                        .await;
                 }
             }
             StreamMessage::RequestStream { stream_id, reason } => {
-                self.streams.insert(stream_id, StreamState {
-                    peer,
-                    reason: reason.clone(),
-                    status: StreamStatus::Requested,
-                    direction: StreamDirection::Inbound,
-                });
-                let _ = self.event_tx.send(AviEvent::StreamRequested {
-                    from: peer_wrap,
-                    reason,
-                    stream_id: StreamId(stream_id),
-                }).await;
+                self.streams.insert(
+                    stream_id,
+                    StreamState {
+                        peer,
+                        reason: reason.clone(),
+                        status: StreamStatus::Requested,
+                        direction: StreamDirection::Inbound,
+                    },
+                );
+                let _ = self
+                    .event_tx
+                    .send(AviEvent::StreamRequested {
+                        from: peer_wrap,
+                        reason,
+                        stream_id: StreamId(stream_id),
+                    })
+                    .await;
             }
             StreamMessage::AcceptStream { stream_id } => {
                 if let Some(state) = self.streams.get_mut(&stream_id) {
                     state.status = StreamStatus::Active;
-                    let _ = self.event_tx.send(AviEvent::StreamAccepted {
-                        peer_id: peer_wrap,
-                        stream_id: StreamId(stream_id),
-                    }).await;
+                    let _ = self
+                        .event_tx
+                        .send(AviEvent::StreamAccepted {
+                            peer_id: peer_wrap,
+                            stream_id: StreamId(stream_id),
+                        })
+                        .await;
                 }
             }
             StreamMessage::RejectStream { stream_id, reason } => {
                 if let Some(_state) = self.streams.remove(&stream_id) {
-                    let _ = self.event_tx.send(AviEvent::StreamRejected {
-                        peer_id: peer_wrap,
-                        stream_id: StreamId(stream_id),
-                        reason,
-                    }).await;
+                    let _ = self
+                        .event_tx
+                        .send(AviEvent::StreamRejected {
+                            peer_id: peer_wrap,
+                            stream_id: StreamId(stream_id),
+                            reason,
+                        })
+                        .await;
                 }
             }
             StreamMessage::StreamData { stream_id, data } => {
                 if self.streams.contains_key(&stream_id) {
-                    let _ = self.event_tx.send(AviEvent::StreamData {
-                        from: peer_wrap,
-                        stream_id: StreamId(stream_id),
-                        data,
-                    }).await;
+                    let _ = self
+                        .event_tx
+                        .send(AviEvent::StreamData {
+                            from: peer_wrap,
+                            stream_id: StreamId(stream_id),
+                            data,
+                        })
+                        .await;
                 }
             }
             StreamMessage::CloseStream { stream_id } => {
                 self.streams.remove(&stream_id);
-                let _ = self.event_tx.send(AviEvent::StreamClosed {
-                    peer_id: peer_wrap,
-                    stream_id: StreamId(stream_id),
-                    reason: StreamCloseReason::RemoteClose,
-                }).await;
+                let _ = self
+                    .event_tx
+                    .send(AviEvent::StreamClosed {
+                        peer_id: peer_wrap,
+                        stream_id: StreamId(stream_id),
+                        reason: StreamCloseReason::RemoteClose,
+                    })
+                    .await;
             }
         }
     }
@@ -480,8 +604,12 @@ impl Runtime {
         }
 
         self.discovered_peers.insert(peer_id);
-        let _ = self.event_tx.send(AviEvent::PeerDiscovered {
-            peer_id: PeerId::from(peer_id),
-        }).await;
+        let _ = self
+            .event_tx
+            .send(AviEvent::PeerDiscovered {
+                peer_id: PeerId::from(peer_id),
+            })
+            .await;
     }
 }
+
