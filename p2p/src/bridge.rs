@@ -1,11 +1,11 @@
-use tokio::net::UdpSocket;
-use std::net::SocketAddr;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use crate::{set_nested_value, AviEvent, AviP2pHandle, PeerId, StreamId};
+use avi_p2p_protocol::{DownlinkMessage, UplinkMessage, MAX_PACKET_SIZE};
 use serde_json::json;
+use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
-use crate::{set_nested_value, AviP2pHandle, PeerId, StreamId, AviEvent};
-use avi_p2p_protocol::{UplinkMessage, DownlinkMessage, MAX_PACKET_SIZE};
 
 pub struct BridgeConfig {
     pub udp_port: u16,
@@ -41,7 +41,7 @@ impl EmbeddedBridge {
         let uplink_socket = socket.clone();
         let uplink_handle = handle.clone();
         let uplink_sessions = sessions.clone();
-        
+
         tokio::spawn(async move {
             let mut buf = [0u8; MAX_PACKET_SIZE];
 
@@ -59,8 +59,9 @@ impl EmbeddedBridge {
                         remote_addr,
                         uplink_socket.clone(),
                         uplink_handle.clone(),
-                        uplink_sessions.clone()
-                    ).await;
+                        uplink_sessions.clone(),
+                    )
+                    .await;
                 }
             }
         });
@@ -69,14 +70,15 @@ impl EmbeddedBridge {
         let downlink_socket = socket.clone();
         let downlink_sessions = sessions.clone();
         let mut event_rx = handle.subscribe_events().await.map_err(|e| e.to_string())?;
-        
+
         tokio::spawn(async move {
-            while let Some(event) = event_rx.recv().await {
+            while let Ok(event) = event_rx.recv().await {
                 Self::handle_downlink_event(
                     event,
                     downlink_socket.clone(),
-                    downlink_sessions.clone()
-                ).await;
+                    downlink_sessions.clone(),
+                )
+                .await;
             }
         });
 
@@ -94,29 +96,32 @@ impl EmbeddedBridge {
 
         match msg {
             UplinkMessage::Hello { device_id } => {
-                sessions_lock.insert(addr, DeviceSession {
-                    device_id,
-                    active_streams: HashMap::new(),
-                    subscriptions: HashSet::new(),
-                });
+                sessions_lock.insert(
+                    addr,
+                    DeviceSession {
+                        device_id,
+                        active_streams: HashMap::new(),
+                        subscriptions: HashSet::new(),
+                    },
+                );
 
                 let welcome = DownlinkMessage::Welcome;
                 let mut tx_buf = [0u8; 64];
                 if let Ok(data) = postcard::to_slice(&welcome, &mut tx_buf) {
                     let _ = socket.send_to(data, addr).await;
                 }
-                
+
                 println!("✅ Device {} connected from {}", device_id, addr);
-            },
+            }
 
             UplinkMessage::Subscribe { topic } => {
                 if let Some(session) = sessions_lock.get_mut(&addr) {
                     println!("📥 Device {} subscribing to: {}", session.device_id, topic);
-                    
+
                     // Subscribe on the P2P mesh
                     if let Ok(_) = handle.subscribe(topic).await {
                         session.subscriptions.insert(topic.to_string());
-                        
+
                         // Send acknowledgment
                         let ack = DownlinkMessage::SubscribeAck { topic };
                         let mut tx_buf = [0u8; 256];
@@ -125,15 +130,18 @@ impl EmbeddedBridge {
                         }
                     }
                 }
-            },
+            }
 
             UplinkMessage::Unsubscribe { topic } => {
                 if let Some(session) = sessions_lock.get_mut(&addr) {
-                    println!("📤 Device {} unsubscribing from: {}", session.device_id, topic);
-                    
+                    println!(
+                        "📤 Device {} unsubscribing from: {}",
+                        session.device_id, topic
+                    );
+
                     session.subscriptions.remove(topic);
                     let _ = handle.unsubscribe(topic).await;
-                    
+
                     // Send acknowledgment
                     let ack = DownlinkMessage::UnsubscribeAck { topic };
                     let mut tx_buf = [0u8; 256];
@@ -141,15 +149,19 @@ impl EmbeddedBridge {
                         let _ = socket.send_to(data, addr).await;
                     }
                 }
-            },
+            }
 
             UplinkMessage::Publish { topic, data } => {
                 if let Some(_session) = sessions_lock.get(&addr) {
                     let _ = handle.publish(topic, data.to_vec()).await;
                 }
-            },
+            }
 
-            UplinkMessage::StreamStart { local_stream_id, target_peer_id, reason } => {
+            UplinkMessage::StreamStart {
+                local_stream_id,
+                target_peer_id,
+                reason,
+            } => {
                 if let Some(session) = sessions_lock.get_mut(&addr) {
                     if target_peer_id.is_empty() {
                         println!("Device requested stream with no target.");
@@ -157,24 +169,32 @@ impl EmbeddedBridge {
                     }
 
                     let peer_id = PeerId::new(target_peer_id);
-                    println!("Bridging Stream {} -> Mesh Peer {}", local_stream_id, peer_id);
+                    println!(
+                        "Bridging Stream {} -> Mesh Peer {}",
+                        local_stream_id, peer_id
+                    );
 
                     match handle.request_stream(peer_id, reason.to_string()).await {
                         Ok(mesh_stream_id) => {
-                            session.active_streams.insert(local_stream_id, mesh_stream_id);
-                        },
+                            session
+                                .active_streams
+                                .insert(local_stream_id, mesh_stream_id);
+                        }
                         Err(e) => eprintln!("Bridge Failed to open mesh stream: {}", e),
                     }
                 }
-            },
+            }
 
-            UplinkMessage::StreamData { local_stream_id, data } => {
+            UplinkMessage::StreamData {
+                local_stream_id,
+                data,
+            } => {
                 if let Some(session) = sessions_lock.get(&addr) {
                     if let Some(mesh_id) = session.active_streams.get(&local_stream_id) {
                         let _ = handle.send_stream_data(*mesh_id, data.to_vec()).await;
                     }
                 }
-            },
+            }
 
             UplinkMessage::StreamClose { local_stream_id } => {
                 if let Some(session) = sessions_lock.get_mut(&addr) {
@@ -184,7 +204,10 @@ impl EmbeddedBridge {
                 }
             }
 
-            UplinkMessage::ButtonPress { button_id, press_type } => {
+            UplinkMessage::ButtonPress {
+                button_id,
+                press_type,
+            } => {
                 if let Some(session) = sessions_lock.get(&addr) {
                     let dev_id = session.device_id;
 
@@ -198,16 +221,18 @@ impl EmbeddedBridge {
                             .unwrap_or_default().as_secs()
                     });
 
-                    let _ = handle.publish(&topic, serde_json::to_vec(&payload).unwrap()).await;
+                    let _ = handle
+                        .publish(&topic, serde_json::to_vec(&payload).unwrap())
+                        .await;
                 }
-            },
+            }
 
             UplinkMessage::SensorUpdate { sensor_name, data } => {
                 if let Some(session) = sessions_lock.get(&addr) {
                     let dev_id = session.device_id;
 
                     let topic = format!("avi/home/device_{}/sensor/{}", dev_id, sensor_name);
-                    
+
                     let val = match data {
                         avi_p2p_protocol::SensorValue::Temperature(v) => json!(v),
                         avi_p2p_protocol::SensorValue::Humidity(v) => json!(v),
@@ -231,17 +256,25 @@ impl EmbeddedBridge {
                            .unwrap_or_default().as_secs()
                     });
 
-                    let _ = handle.publish(&topic, serde_json::to_vec(&payload).unwrap()).await;
+                    let _ = handle
+                        .publish(&topic, serde_json::to_vec(&payload).unwrap())
+                        .await;
 
                     match handle.get_ctx("").await {
                         Ok(v) => {
                             let mut current_ctx = v;
 
-                            match set_nested_value(&mut current_ctx, &format!("avi.sensors.{}.{}", dev_id, sensor_name), payload) {
-                                Ok(..) => handle.update_context(current_ctx).await.unwrap_or_else(|_| println!("Failed to update context")),
-                                Err(e) => eprintln!("Failed to update context: {}", e)
+                            match set_nested_value(
+                                &mut current_ctx,
+                                &format!("avi.sensors.{}.{}", dev_id, sensor_name),
+                                payload,
+                            ) {
+                                Ok(..) => handle
+                                    .update_context(current_ctx)
+                                    .await
+                                    .unwrap_or_else(|_| println!("Failed to update context")),
+                                Err(e) => eprintln!("Failed to update context: {}", e),
                             }
-
                         }
                         Err(e) => eprintln!("Failed to get current context: {}", e),
                     }
@@ -257,15 +290,15 @@ impl EmbeddedBridge {
     ) {
         if let AviEvent::Message { topic, data, .. } = event {
             let sessions_lock = sessions.lock().await;
-            
+
             // Send to all devices subscribed to this topic
             for (addr, session) in sessions_lock.iter() {
                 if session.subscriptions.contains(&topic) {
-                    let msg = DownlinkMessage::Message { 
-                        topic: &topic, 
-                        data: &data 
+                    let msg = DownlinkMessage::Message {
+                        topic: &topic,
+                        data: &data,
                     };
-                    
+
                     let mut tx_buf = [0u8; MAX_PACKET_SIZE];
                     if let Ok(encoded) = postcard::to_slice(&msg, &mut tx_buf) {
                         let _ = socket.send_to(encoded, addr).await;

@@ -18,7 +18,6 @@ use tokio::sync::broadcast;
 pub struct AviP2p {
     handle: AviP2pHandle,
     shutdown_tx: Option<oneshot::Sender<()>>,
-    event_broadcast: Arc<broadcast::Sender<AviEvent>>,
 }
 
 /// Cloneable handle for interacting with the P2P node.
@@ -123,7 +122,6 @@ impl AviP2p {
         let node = AviP2p {
             handle,
             shutdown_tx: Some(shutdown_tx),
-            event_broadcast,
         };
 
         Ok((node, user_event_rx))
