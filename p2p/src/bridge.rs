@@ -212,6 +212,8 @@ impl EmbeddedBridge {
                 if let Some(session) = sessions_lock.get(&addr) {
                     let dev_id = session.device_id;
 
+                    println!("{}", custom_data);
+
                     let topic = format!("device/{}/button", dev_id);
 
                     let payload = json!({
