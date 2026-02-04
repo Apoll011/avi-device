@@ -1,6 +1,6 @@
 [package]
 name = "avi-device"
-version = "0.3.1"
+version = "0.5.7"
 edition = "2021"
 description = "Device Comunication for AVI systems"
 

@@ -1,6 +1,6 @@
 [package]
 name = "avi-p2p"
-version = "0.2.0"
+version = "0.5.1"
 edition = "2021"
 description = "Production-grade P2P abstraction for AVI Core"
 
