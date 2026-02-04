@@ -147,18 +147,26 @@ impl<'a, S: UdpClient, H: MessageHandler> AviEmbedded<'a, S, H> {
         &mut self,
         button_id: u8,
         press_type: PressType,
+        custom_data: &str,
     ) -> Result<(), S::Error> {
         let msg = UplinkMessage::ButtonPress {
             button_id,
             press_type,
+            custom_data,
         };
         self.send_packet(&msg).await
     }
 
-    pub async fn update_sensor(&mut self, name: &str, data: SensorValue) -> Result<(), S::Error> {
+    pub async fn update_sensor(
+        &mut self,
+        name: &str,
+        data: SensorValue,
+        custom_data: &str,
+    ) -> Result<(), S::Error> {
         let msg = UplinkMessage::SensorUpdate {
             sensor_name: name,
             data,
+            custom_data,
         };
         self.send_packet(&msg).await
     }

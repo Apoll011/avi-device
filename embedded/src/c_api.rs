@@ -48,26 +48,32 @@ pub enum AviCommand {
     ButtonPress {
         button_id: u8,
         press_type: PressType,
+        custom_data: String<32>,
     },
     SensorTemperature {
         sensor_name: String<32>,
         value: f32,
+        custom_data: String<32>,
     },
     SensorHumidity {
         sensor_name: String<32>,
         value: f32,
+        custom_data: String<32>,
     },
     SensorBattery {
         sensor_name: String<32>,
         value: u8,
+        custom_data: String<32>,
     },
     SensorStatus {
         sensor_name: String<32>,
         value: bool,
+        custom_data: String<32>,
     },
     SensorRaw {
         sensor_name: String<32>,
         value: i32,
+        custom_data: String<32>,
     },
     // 'Poll' command removed - we run poll explicitly
 }
@@ -94,12 +100,10 @@ impl AviCommandQueue {
 
 static COMMAND_QUEUE: AviCommandQueue = AviCommandQueue::new();
 
-// Opaque types for C
 pub struct CAviEmbedded {
     _private: [u8; 0],
 }
 
-// C callback types
 pub type CMessageCallback = extern "C" fn(
     user_data: *mut c_void,
     topic: *const c_char,
@@ -136,9 +140,6 @@ impl UdpClient for CUdpClientWrapper {
     }
 
     async fn receive(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        // This effectively polls the C implementation.
-        // Since C implementation returns immediately (after timeout),
-        // we can treat this as Ready.
         let result = (self.recv_fn)(self.user_data, buf.as_mut_ptr(), buf.len());
         if result >= 0 {
             Ok(result as usize)
@@ -243,10 +244,7 @@ fn send_command(avi: *mut CAviEmbedded, cmd: AviCommand) -> i32 {
 // ============================================================================
 // Sync Executor Logic
 // ============================================================================
-
-// Minimal Block On for no_std
 fn block_on<F: Future>(mut future: F) -> F::Output {
-    // Dummy waker that does nothing
     fn clone(_: *const ()) -> RawWaker {
         RawWaker::new(core::ptr::null(), &VTABLE)
     }
@@ -259,18 +257,12 @@ fn block_on<F: Future>(mut future: F) -> F::Output {
     let waker = unsafe { Waker::from_raw(raw_waker) };
     let mut cx = Context::from_waker(&waker);
 
-    // Pin the future
     let mut future = unsafe { core::pin::Pin::new_unchecked(&mut future) };
 
     loop {
         match future.as_mut().poll(&mut cx) {
             Poll::Ready(res) => return res,
-            Poll::Pending => {
-                // Since our IO is effectively synchronous (C callbacks return immediately),
-                // Pending shouldn't really happen unless we are waiting on something logic-based.
-                // In a real executor we would sleep. Here we just busy loop or panic if stuck.
-                // For this specific UDP implementation, Pending is unlikely.
-            }
+            Poll::Pending => {}
         }
     }
 }
@@ -314,40 +306,80 @@ async fn process_single_command(
         AviCommand::ButtonPress {
             button_id,
             press_type,
+            custom_data,
         } => {
-            let _ = avi.button_pressed(button_id, press_type).await;
-        }
-        AviCommand::SensorTemperature { sensor_name, value } => {
             let _ = avi
-                .update_sensor(sensor_name.as_str(), SensorValue::Temperature(value))
+                .button_pressed(button_id, press_type, custom_data.as_str())
                 .await;
         }
-        AviCommand::SensorHumidity { sensor_name, value } => {
+        AviCommand::SensorTemperature {
+            sensor_name,
+            value,
+            custom_data,
+        } => {
             let _ = avi
-                .update_sensor(sensor_name.as_str(), SensorValue::Humidity(value))
+                .update_sensor(
+                    sensor_name.as_str(),
+                    SensorValue::Temperature(value),
+                    custom_data.as_str(),
+                )
                 .await;
         }
-        AviCommand::SensorBattery { sensor_name, value } => {
+        AviCommand::SensorHumidity {
+            sensor_name,
+            value,
+            custom_data,
+        } => {
             let _ = avi
-                .update_sensor(sensor_name.as_str(), SensorValue::Battery(value))
+                .update_sensor(
+                    sensor_name.as_str(),
+                    SensorValue::Humidity(value),
+                    custom_data.as_str(),
+                )
                 .await;
         }
-        AviCommand::SensorStatus { sensor_name, value } => {
+        AviCommand::SensorBattery {
+            sensor_name,
+            value,
+            custom_data,
+        } => {
             let _ = avi
-                .update_sensor(sensor_name.as_str(), SensorValue::Status(value))
+                .update_sensor(
+                    sensor_name.as_str(),
+                    SensorValue::Battery(value),
+                    custom_data.as_str(),
+                )
                 .await;
         }
-        AviCommand::SensorRaw { sensor_name, value } => {
+        AviCommand::SensorStatus {
+            sensor_name,
+            value,
+            custom_data,
+        } => {
             let _ = avi
-                .update_sensor(sensor_name.as_str(), SensorValue::Raw(value))
+                .update_sensor(
+                    sensor_name.as_str(),
+                    SensorValue::Status(value),
+                    custom_data.as_str(),
+                )
+                .await;
+        }
+        AviCommand::SensorRaw {
+            sensor_name,
+            value,
+            custom_data,
+        } => {
+            let _ = avi
+                .update_sensor(
+                    sensor_name.as_str(),
+                    SensorValue::Raw(value),
+                    custom_data.as_str(),
+                )
                 .await;
         }
     }
 }
 
-// ----------------------------------------------------------------------------
-// Replaced Poll Function: Act as the Executor
-// ----------------------------------------------------------------------------
 #[no_mangle]
 pub extern "C" fn avi_embedded_poll(avi: *mut CAviEmbedded) -> i32 {
     if avi.is_null() {
@@ -357,15 +389,11 @@ pub extern "C" fn avi_embedded_poll(avi: *mut CAviEmbedded) -> i32 {
     let wrapper = unsafe { &*(avi as *const AviWrapper) };
     let mut avi_borrow = wrapper.avi.borrow_mut();
 
-    // 1. Drain the queue
     let receiver = COMMAND_QUEUE.receiver();
     while let Ok(cmd) = receiver.try_receive() {
-        // Run command synchronously
         block_on(process_single_command(&mut *avi_borrow, cmd));
     }
 
-    // 2. Poll the network
-    // This calls UdpClient::receive which calls C recv (1ms timeout)
     block_on(avi_borrow.poll());
 
     0
@@ -552,6 +580,8 @@ pub extern "C" fn avi_embedded_button_pressed(
     avi: *mut CAviEmbedded,
     button_id: u8,
     press_type: u8,
+    custom_data: *const c_char,
+    custom_data_len: usize,
 ) -> i32 {
     let press = match press_type {
         0 => PressType::Single,
@@ -559,11 +589,17 @@ pub extern "C" fn avi_embedded_button_pressed(
         2 => PressType::Long,
         _ => return -1,
     };
+
+    let data_custom = match char_to_string(custom_data, custom_data_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
     send_command(
         avi,
         AviCommand::ButtonPress {
             button_id,
             press_type: press,
+            custom_data: data_custom,
         },
     )
 }
@@ -574,23 +610,27 @@ pub extern "C" fn avi_embedded_update_sensor_temperature(
     sensor_name: *const c_char,
     sensor_name_len: usize,
     value: f32,
+    custom_data: *const c_char,
+    custom_data_len: usize,
 ) -> i32 {
     if avi.is_null() || sensor_name.is_null() {
         return -1;
     }
-    let name_slice = unsafe { slice::from_raw_parts(sensor_name as *const u8, sensor_name_len) };
-    let mut name_string = String::<32>::new();
-    if name_string
-        .push_str(core::str::from_utf8(name_slice).unwrap_or(""))
-        .is_err()
-    {
-        return -1;
-    }
+    let name_string = match char_to_string(sensor_name, sensor_name_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
+
+    let data_custom = match char_to_string(custom_data, custom_data_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
     send_command(
         avi,
         AviCommand::SensorTemperature {
             sensor_name: name_string,
             value,
+            custom_data: data_custom,
         },
     )
 }
@@ -601,23 +641,27 @@ pub extern "C" fn avi_embedded_update_sensor_humidity(
     sensor_name: *const c_char,
     sensor_name_len: usize,
     value: f32,
+    custom_data: *const c_char,
+    custom_data_len: usize,
 ) -> i32 {
     if avi.is_null() || sensor_name.is_null() {
         return -1;
     }
-    let name_slice = unsafe { slice::from_raw_parts(sensor_name as *const u8, sensor_name_len) };
-    let mut name_string = String::<32>::new();
-    if name_string
-        .push_str(core::str::from_utf8(name_slice).unwrap_or(""))
-        .is_err()
-    {
-        return -1;
-    }
+    let name_string = match char_to_string(sensor_name, sensor_name_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
+
+    let data_custom = match char_to_string(custom_data, custom_data_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
     send_command(
         avi,
         AviCommand::SensorHumidity {
             sensor_name: name_string,
             value,
+            custom_data: data_custom,
         },
     )
 }
@@ -628,23 +672,27 @@ pub extern "C" fn avi_embedded_update_sensor_battery(
     sensor_name: *const c_char,
     sensor_name_len: usize,
     value: u8,
+    custom_data: *const c_char,
+    custom_data_len: usize,
 ) -> i32 {
     if avi.is_null() || sensor_name.is_null() {
         return -1;
     }
-    let name_slice = unsafe { slice::from_raw_parts(sensor_name as *const u8, sensor_name_len) };
-    let mut name_string = String::<32>::new();
-    if name_string
-        .push_str(core::str::from_utf8(name_slice).unwrap_or(""))
-        .is_err()
-    {
-        return -1;
-    }
+    let name_string = match char_to_string(sensor_name, sensor_name_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
+
+    let data_custom = match char_to_string(custom_data, custom_data_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
     send_command(
         avi,
         AviCommand::SensorBattery {
             sensor_name: name_string,
             value,
+            custom_data: data_custom,
         },
     )
 }
@@ -655,23 +703,29 @@ pub extern "C" fn avi_embedded_update_sensor_status(
     sensor_name: *const c_char,
     sensor_name_len: usize,
     value: bool,
+    custom_data: *const c_char,
+    custom_data_len: usize,
 ) -> i32 {
     if avi.is_null() || sensor_name.is_null() {
         return -1;
     }
-    let name_slice = unsafe { slice::from_raw_parts(sensor_name as *const u8, sensor_name_len) };
-    let mut name_string = String::<32>::new();
-    if name_string
-        .push_str(core::str::from_utf8(name_slice).unwrap_or(""))
-        .is_err()
-    {
-        return -1;
-    }
+
+    let name_string = match char_to_string(sensor_name, sensor_name_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
+
+    let data_custom = match char_to_string(custom_data, custom_data_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
+
     send_command(
         avi,
         AviCommand::SensorStatus {
             sensor_name: name_string,
             value,
+            custom_data: data_custom,
         },
     )
 }
@@ -682,23 +736,42 @@ pub extern "C" fn avi_embedded_update_sensor_raw(
     sensor_name: *const c_char,
     sensor_name_len: usize,
     value: i32,
+    custom_data: *const c_char,
+    custom_data_len: usize,
 ) -> i32 {
     if avi.is_null() || sensor_name.is_null() {
         return -1;
     }
-    let name_slice = unsafe { slice::from_raw_parts(sensor_name as *const u8, sensor_name_len) };
-    let mut name_string = String::<32>::new();
-    if name_string
-        .push_str(core::str::from_utf8(name_slice).unwrap_or(""))
-        .is_err()
-    {
-        return -1;
-    }
+
+    let name_string = match char_to_string(sensor_name, sensor_name_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
+
+    let data_custom = match char_to_string(custom_data, custom_data_len) {
+        Ok(v) => v,
+        Err(i) => return i,
+    };
+
     send_command(
         avi,
         AviCommand::SensorRaw {
             sensor_name: name_string,
             value,
+            custom_data: data_custom,
         },
     )
+}
+
+fn char_to_string(data: *const c_char, data_len: usize) -> Result<String<32>, i32> {
+    let data_slice = unsafe { slice::from_raw_parts(data as *const u8, data_len) };
+    let mut data_string = String::<32>::new();
+    if data_string
+        .push_str(core::str::from_utf8(data_slice).unwrap_or(""))
+        .is_err()
+    {
+        return Err(-1);
+    }
+
+    Ok(data_string)
 }
