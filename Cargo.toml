@@ -21,4 +21,3 @@ futures = "0.3"
 
 [dev-dependencies]
 avi-p2p-protocol = { path = "./protocol" }
-avi-p2p-embedded = { path = "./embedded" }

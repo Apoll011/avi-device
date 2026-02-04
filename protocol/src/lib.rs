@@ -1,5 +1,5 @@
 #![no_std]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub const MAX_PACKET_SIZE: usize = 1024;
 
@@ -21,42 +21,70 @@ pub enum SensorValue {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum UplinkMessage<'a> {
-    Hello { device_id: u64 },
+    Hello {
+        device_id: u64,
+    },
 
     // Pub/Sub
-    Subscribe { topic: &'a str },
-    Unsubscribe { topic: &'a str },
-    Publish { topic: &'a str, #[serde(with = "serde_bytes")] data: &'a [u8] },
+    Subscribe {
+        topic: &'a str,
+    },
+    Unsubscribe {
+        topic: &'a str,
+    },
+    Publish {
+        topic: &'a str,
+        #[serde(with = "serde_bytes")]
+        data: &'a [u8],
+    },
 
     // Streams
-    StreamStart { local_stream_id: u8, target_peer_id: &'a str, reason: &'a str },
-    StreamData { local_stream_id: u8, #[serde(with = "serde_bytes")] data: &'a [u8] },
-    StreamClose { local_stream_id: u8 },
+    StreamStart {
+        local_stream_id: u8,
+        target_peer_id: &'a str,
+        reason: &'a str,
+    },
+    StreamData {
+        local_stream_id: u8,
+        #[serde(with = "serde_bytes")]
+        data: &'a [u8],
+    },
+    StreamClose {
+        local_stream_id: u8,
+    },
 
     // Events
     ButtonPress {
         button_id: u8,
-        press_type: PressType
+        press_type: PressType,
+        custom_data: &'a str,
     },
 
     SensorUpdate {
         sensor_name: &'a str, // e.g., "temp_kitchen"
-        data: SensorValue
+        data: SensorValue,
+        custom_data: &'a str,
     },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum DownlinkMessage<'a> {
     Welcome,
-    Error { reason: u8 },
-    
-    // Pub/Sub Events
-    Message { 
-        topic: &'a str, 
-        #[serde(with = "serde_bytes")] 
-        data: &'a [u8] 
+    Error {
+        reason: u8,
     },
-    
-    SubscribeAck { topic: &'a str },
-    UnsubscribeAck { topic: &'a str },
+
+    // Pub/Sub Events
+    Message {
+        topic: &'a str,
+        #[serde(with = "serde_bytes")]
+        data: &'a [u8],
+    },
+
+    SubscribeAck {
+        topic: &'a str,
+    },
+    UnsubscribeAck {
+        topic: &'a str,
+    },
 }

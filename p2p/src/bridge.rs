@@ -211,7 +211,7 @@ impl EmbeddedBridge {
                 if let Some(session) = sessions_lock.get(&addr) {
                     let dev_id = session.device_id;
 
-                    let topic = format!("avi/home/device_{}/button", dev_id);
+                    let topic = format!("device/{}/button", dev_id);
 
                     let payload = json!({
                         "button_id": button_id,
@@ -231,7 +231,7 @@ impl EmbeddedBridge {
                 if let Some(session) = sessions_lock.get(&addr) {
                     let dev_id = session.device_id;
 
-                    let topic = format!("avi/home/device_{}/sensor/{}", dev_id, sensor_name);
+                    let topic = format!("device/{}/sensor/{}", dev_id, sensor_name);
 
                     let val = match data {
                         avi_p2p_protocol::SensorValue::Temperature(v) => json!(v),
