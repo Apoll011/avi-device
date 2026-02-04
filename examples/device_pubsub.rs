@@ -23,10 +23,13 @@ async fn main() -> Result<(), String> {
     });
 
     // 4. Subscribe to a topic
-    device.subscribe("home/sensors/temp", |from, topic, data| {
-        let msg = String::from_utf8_lossy(&data);
-        println!("📩 Received on '{}' from {}: {}", topic, from, msg);
-    }).await.map_err(|e| e.to_string())?;
+    device
+        .subscribe("home/sensors/temp", |from, topic, data| {
+            let msg = String::from_utf8_lossy(&data);
+            println!("📩 Received on '{}' from {}: {}", topic, from, msg);
+        })
+        .await
+        .map_err(|e| e.to_string())?;
 
     println!("🚀 Device started. Publishing messages every 2 seconds...");
 
@@ -36,13 +39,14 @@ async fn main() -> Result<(), String> {
         count += 1;
         let message = format!("Temperature Update #{}", count);
         println!("📤 Publishing: {}", message);
-        
-        device.publish("home/sensors/temp", message.into_bytes())
+
+        device
+            .publish("home/sensors/temp", message.into_bytes())
             .await
             .map_err(|e| e.to_string())?;
 
         sleep(Duration::from_secs(2)).await;
-        
+
         if count >= 5 {
             break;
         }

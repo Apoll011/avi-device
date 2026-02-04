@@ -1,13 +1,13 @@
-use avi_device::device::{AviDevice, AviDeviceConfig, AviDeviceType};
-use avi_device::capability::{CapabilityBuilder, SensorCapability};
-use avi_device::stream::{StreamContext, StreamHandler, StreamHandlerFactory};
-use avi_p2p::{PeerId, StreamId, StreamCloseReason};
 use async_trait::async_trait;
+use avi_device::capability::{CapabilityBuilder, SensorCapability};
+use avi_device::device::{AviDevice, AviDeviceConfig, AviDeviceType};
+use avi_device::stream::{StreamContext, StreamHandler, StreamHandlerFactory};
+use avi_p2p::{PeerId, StreamCloseReason, StreamId};
+use serde_json::json;
 use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
-use serde_json::json;
 
 // --- Stream Handler for Chat ---
 
@@ -25,7 +25,10 @@ impl StreamHandler for ChatStreamHandler {
     }
 
     async fn on_rejected(&mut self, peer_id: PeerId, _stream_id: StreamId, reason: String) {
-        println!("\n[Stream] Chat request to {} rejected: {}", peer_id, reason);
+        println!(
+            "\n[Stream] Chat request to {} rejected: {}",
+            peer_id, reason
+        );
         print!("> ");
         io::stdout().flush().unwrap();
     }
@@ -40,7 +43,12 @@ impl StreamHandler for ChatStreamHandler {
         io::stdout().flush().unwrap();
     }
 
-    async fn on_closed(&mut self, peer_id: PeerId, _stream_id: StreamId, reason: StreamCloseReason) {
+    async fn on_closed(
+        &mut self,
+        peer_id: PeerId,
+        _stream_id: StreamId,
+        reason: StreamCloseReason,
+    ) {
         println!("\n[Stream] Chat with {} closed ({:?})", peer_id, reason);
         print!("> ");
         io::stdout().flush().unwrap();
@@ -65,17 +73,23 @@ async fn main() -> Result<(), String> {
 
     // 1. Setup Device
     let caps = CapabilityBuilder::new()
-        .sensor("microphone", SensorCapability::Microphone {
-            present: true,
-            array_size: 2,
-            sampling_rate_khz: 44,
-            max_spl_db: 110,
-        })
-        .sensor("cli_node", SensorCapability::Temperature {
-            present: true,
-            accuracy_celsius: 0.1,
-            current_value: Some(1.0),
-        })
+        .sensor(
+            "microphone",
+            SensorCapability::Microphone {
+                present: true,
+                array_size: 2,
+                sampling_rate_khz: 44,
+                max_spl_db: 110,
+            },
+        )
+        .sensor(
+            "cli_node",
+            SensorCapability::Temperature {
+                present: true,
+                accuracy_celsius: 0.1,
+                current_value: Some(1.0),
+            },
+        )
         .build();
 
     let node_name = format!("cli-node-{}", std::process::id());
@@ -87,9 +101,11 @@ async fn main() -> Result<(), String> {
     };
 
     let device = AviDevice::new(config).await?;
-    
+
     // Register the chat stream handler
-    device.register_stream_handler("chat".to_string(), ChatStreamFactory).await;
+    device
+        .register_stream_handler("chat".to_string(), ChatStreamFactory)
+        .await;
 
     // 2. Start Event Loop
     let device_clone = device.clone();
@@ -98,12 +114,15 @@ async fn main() -> Result<(), String> {
     });
 
     // 3. Subscription Handler
-    device.subscribe("global", move |from, topic, data| {
-        let msg = String::from_utf8_lossy(&data);
-        println!("\n[PubSub] {} on {}: {}", from, topic, msg);
-        print!("> ");
-        let _ = io::stdout().flush();
-    }).await.map_err(|e| e.to_string())?;
+    device
+        .subscribe("global", move |from, topic, data| {
+            let msg = String::from_utf8_lossy(&data);
+            println!("\n[PubSub] {} on {}: {}", from, topic, msg);
+            print!("> ");
+            let _ = io::stdout().flush();
+        })
+        .await
+        .map_err(|e| e.to_string())?;
 
     // 4. CLI Loop
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
@@ -134,37 +153,43 @@ async fn main() -> Result<(), String> {
                 println!("  hangup             - Close active stream");
                 println!("  exit               - Quit");
             }
-            "peers" => {
-                match device.get_peers().await {
-                    Ok(p) => println!("Connected peers: {:?}", p),
-                    Err(e) => println!("Error: {}", e),
-                }
-            }
+            "peers" => match device.get_peers().await {
+                Ok(p) => println!("Connected peers: {:?}", p),
+                Err(e) => println!("Error: {}", e),
+            },
             "status" => {
                 if let Ok(id) = device.get_core_id().await {
                     println!("Core ID: {}", id);
                 } else {
                     println!("Core ID: Not set yet (waiting for discovery)");
                 }
-                // Note: local peer id is not directly exposed in AviDevice yet, 
+                // Note: local peer id is not directly exposed in AviDevice yet,
                 // but we can see it from events or context.
                 if let Ok(ctx) = device.get_ctx("").await {
-                    println!("Local Context Keys: {:?}", ctx.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+                    println!(
+                        "Local Context Keys: {:?}",
+                        ctx.as_object().map(|o| o.keys().collect::<Vec<_>>())
+                    );
                 }
             }
             "sub" if parts.len() > 1 => {
-                if let Err(e) = device.subscribe(parts[1], |from, _topic, data| println!("Got from {from} data: {:?}", data)).await {
+                if let Err(e) = device
+                    .subscribe(parts[1], |from, _topic, data| {
+                        println!("Got from {from} data: {:?}", data)
+                    })
+                    .await
+                {
                     println!("Failed to subscribe: {}", e);
                 }
                 println!("Subscribed to '{}'", parts[1]);
-            },
+            }
             "pub" if parts.len() > 2 => {
                 let topic = parts[1];
                 let content = parts[2..].join(" ");
                 if let Err(e) = device.publish(topic, content.into_bytes()).await {
                     println!("Failed to publish: {}", e);
                 }
-            },
+            }
             "set" => {
                 if parts.len() < 3 {
                     println!("Usage: set <path> <value>");

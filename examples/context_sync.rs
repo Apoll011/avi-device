@@ -1,6 +1,6 @@
-use avi_p2p::{AviP2p, AviP2pConfig, AviEvent};
-use tokio::io::{self, AsyncBufReadExt};
+use avi_p2p::{AviEvent, AviP2p, AviP2pConfig};
 use serde_json::json;
+use tokio::io::{self, AsyncBufReadExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -31,10 +31,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 AviEvent::Started { local_peer_id, .. } => {
                     println!("✅ Node Online: {}", local_peer_id);
-                },
+                }
                 AviEvent::PeerConnected { peer_id, .. } => {
                     println!("🔗 Device Connected: {}", peer_id);
-                },
+                }
                 // --- CONTEXT UPDATE EVENT ---
                 AviEvent::ContextUpdated { peer_id, context } => {
                     // This fires whenever a peer changes their state
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Ok(pretty) = serde_json::to_string_pretty(&context) {
                         println!("{}", pretty);
                     }
-                },
+                }
                 _ => {}
             }
         }
@@ -62,7 +62,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
     while let Ok(Some(line)) = stdin.next_line().await {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.is_empty() { continue; }
+        if parts.is_empty() {
+            continue;
+        }
 
         match parts[0] {
             "name" if parts.len() > 1 => {
@@ -73,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
                 handle.update_context(patch).await?;
                 println!("✅ Name updated.");
-            },
+            }
             "vol" if parts.len() > 1 => {
                 if let Ok(vol) = parts[1].parse::<u8>() {
                     let patch = json!({
@@ -82,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     handle.update_context(patch).await?;
                     println!("✅ Volume set to {}", vol);
                 }
-            },
+            }
             "batt" if parts.len() > 1 => {
                 if let Ok(pct) = parts[1].parse::<u8>() {
                     let patch = json!({
@@ -91,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     handle.update_context(patch).await?;
                     println!("✅ Battery set to {}%", pct);
                 }
-            },
+            }
             "status" if parts.len() > 1 => {
                 let status = parts[1];
                 let patch = json!({
@@ -99,19 +101,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
                 handle.update_context(patch).await?;
                 println!("✅ Status set to '{}'", status);
-            },
+            }
             "get" if parts.len() > 1 => {
                 let target = avi_p2p::PeerId::new(parts[1]);
                 match handle.get_context(Some(target)).await {
-                    Ok(ctx) => println!("📄 Context:\n{}", serde_json::to_string_pretty(&ctx).unwrap()),
+                    Ok(ctx) => println!(
+                        "📄 Context:\n{}",
+                        serde_json::to_string_pretty(&ctx).unwrap()
+                    ),
                     Err(e) => eprintln!("❌ Error: {}", e),
                 }
-            },
-            "me" => {
-                match handle.get_context(None).await {
-                    Ok(ctx) => println!("🏠 My Context:\n{}", serde_json::to_string_pretty(&ctx).unwrap()),
-                    Err(e) => eprintln!("❌ Error: {}", e),
-                }
+            }
+            "me" => match handle.get_context(None).await {
+                Ok(ctx) => println!(
+                    "🏠 My Context:\n{}",
+                    serde_json::to_string_pretty(&ctx).unwrap()
+                ),
+                Err(e) => eprintln!("❌ Error: {}", e),
             },
             "quit" => break,
             _ => println!("Unknown command"),

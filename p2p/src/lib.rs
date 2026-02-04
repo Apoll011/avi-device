@@ -8,21 +8,23 @@
 //! - Kademlia Mesh Networking
 //! - Zero libp2p type exposure
 
-pub mod config;
-pub mod events;
 mod behaviour;
+pub mod bridge;
 mod command;
+pub mod config;
+mod error;
+pub mod events;
 mod node;
 mod protocols;
 mod runtime;
-mod error;
-pub mod bridge;
 
+pub use bridge::{BridgeConfig, EmbeddedBridge};
 pub use config::AviP2pConfig;
 pub use error::{AviP2pError, StreamCloseReason};
 pub use events::{AviEvent, PeerId};
-pub use protocols::stream::{StreamId, StreamStatus, StreamState, generate_stream_id, StreamDirection};
 pub use node::{AviP2p, AviP2pHandle};
+pub use protocols::context::{delete_nested_value, set_nested_value};
 pub use protocols::context::{AviContext, VectorClock};
-pub use protocols::context::{set_nested_value, delete_nested_value};
-pub use bridge::{BridgeConfig, EmbeddedBridge};
+pub use protocols::stream::{
+    generate_stream_id, StreamDirection, StreamId, StreamState, StreamStatus,
+};

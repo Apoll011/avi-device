@@ -1,8 +1,8 @@
 use avi_p2p_embedded::{AviEmbedded, AviEmbeddedConfig, UdpClient};
 use avi_p2p_protocol::{PressType, SensorValue};
-use tokio::net::UdpSocket;
-use std::net::SocketAddr;
 use std::io;
+use std::net::SocketAddr;
+use tokio::net::UdpSocket;
 
 // --- MOCK HARDWARE LAYER ---
 // This wrapper adapts a PC UDP socket to the trait expected by the embedded library.
@@ -16,7 +16,10 @@ impl PcSocket {
     async fn new(bind_addr: &str, target_addr: &str) -> io::Result<Self> {
         let sock = UdpSocket::bind(bind_addr).await?;
         let target = target_addr.parse().unwrap();
-        Ok(Self { inner: sock, target })
+        Ok(Self {
+            inner: sock,
+            target,
+        })
     }
 }
 

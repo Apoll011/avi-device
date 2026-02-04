@@ -1,14 +1,8 @@
-use libp2p::{
-    gossipsub,
-    kad,
-    mdns,
-    identify,
-    request_response,
-    swarm::NetworkBehaviour,
-    PeerId as LibPeerId,
-    identity::Keypair,
-};
 use crate::protocols::stream::AviStreamCodec;
+use libp2p::{
+    gossipsub, identify, identity::Keypair, kad, mdns, request_response, swarm::NetworkBehaviour,
+    PeerId as LibPeerId,
+};
 
 #[derive(NetworkBehaviour)]
 pub struct AviBehaviour {
@@ -38,7 +32,8 @@ impl AviBehaviour {
         let gossipsub = gossipsub::Behaviour::new(
             gossipsub::MessageAuthenticity::Signed(local_key.clone()), // Use cloned Keypair
             pubsub_config,
-        ).expect("Valid gossipsub config");
+        )
+        .expect("Valid gossipsub config");
 
         // mDNS (Conditional compilation)
         #[cfg(not(target_arch = "wasm32"))]
@@ -46,16 +41,19 @@ impl AviBehaviour {
             .expect("Failed to create mDNS behaviour");
 
         // Identify
-        let identify = identify::Behaviour::new(identify::Config::new(
-            "/avi/1.0.0".into(),
-            local_key.public(), // Use the public key from the Keypair
-        ).with_agent_version(node_name));
+        let identify = identify::Behaviour::new(
+            identify::Config::new(
+                "/avi/1.0.0".into(),
+                local_key.public(), // Use the public key from the Keypair
+            )
+            .with_agent_version(node_name),
+        );
 
         let stream = request_response::Behaviour::new(
             // `new` expects an IntoIterator of (Protocol, ProtocolSupport) tuples
             std::iter::once((
                 crate::protocols::stream::AviStreamProtocol,
-                request_response::ProtocolSupport::Full
+                request_response::ProtocolSupport::Full,
             )),
             request_response::Config::default(),
         );

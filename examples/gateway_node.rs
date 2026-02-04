@@ -1,5 +1,5 @@
-use avi_p2p::{AviP2p, AviP2pConfig, AviEvent};
-use avi_p2p::bridge::{EmbeddedBridge, BridgeConfig};
+use avi_p2p::bridge::{BridgeConfig, EmbeddedBridge};
+use avi_p2p::{AviEvent, AviP2p, AviP2pConfig};
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -17,18 +17,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gateway_handle = gateway_node.handle();
 
     // Start the UDP Bridge on Port 8888
-    EmbeddedBridge::start(
-        gateway_handle.clone(),
-        BridgeConfig { udp_port: 8888 }
-    ).await.unwrap();
+    EmbeddedBridge::start(gateway_handle.clone(), BridgeConfig { udp_port: 8888 })
+        .await
+        .unwrap();
 
     println!("✅ Gateway started.");
     println!("🌉 Bridge listening on UDP 0.0.0.0:8888");
 
     // Spin up a task to drain gateway events so the loop doesn't block
-    tokio::spawn(async move {
-        while let Some(_) = gateway_events.recv().await {}
-    });
+    tokio::spawn(async move { while let Some(_) = gateway_events.recv().await {} });
 
     // ==========================================
     // NODE B: THE MONITOR (Dashboard/Subscriber)
@@ -48,8 +45,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Note: In real app, you might use wildcard logic if supported or subscribe to specific IDs
     // For this demo, we assume we know the device ID is 5555
     sleep(Duration::from_secs(2)).await; // Wait for mesh connection
-    monitor_handle.subscribe("avi/home/device_5555/button").await?;
-    monitor_handle.subscribe("avi/home/device_5555/sensor/kitchen_temp").await?;
+    monitor_handle
+        .subscribe("avi/home/device_5555/button")
+        .await?;
+    monitor_handle
+        .subscribe("avi/home/device_5555/sensor/kitchen_temp")
+        .await?;
 
     println!("👀 Monitor subscribed to device_5555 topics.");
     println!("   Waiting for Embedded data...\n");

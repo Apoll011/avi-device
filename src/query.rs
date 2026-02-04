@@ -19,9 +19,12 @@ let query = DeviceQuery::all()
     .health(|h| h.thermal_headroom_pct > 50);
 let critical_devices = device.execute_query(query);
 */
-use std::collections::HashMap;
-use crate::capability::{AudioCapability, ComputeCapability, ConnectivityCapability, DisplayCapability, HealthCapability, PowerCapability, SensorCapability};
+use crate::capability::{
+    AudioCapability, ComputeCapability, ConnectivityCapability, DisplayCapability,
+    HealthCapability, PowerCapability, SensorCapability,
+};
 use crate::DeviceCapabilities;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum CapabilityType {
@@ -57,10 +60,7 @@ impl CapabilityFilter {
         F: Fn(&ComputeCapability) -> bool + 'static,
     {
         Self::new(CapabilityType::Compute, move |caps| {
-            caps.compute
-                .as_ref()
-                .map(|c| predicate(c))
-                .unwrap_or(false)
+            caps.compute.as_ref().map(|c| predicate(c)).unwrap_or(false)
         })
     }
 
@@ -69,10 +69,7 @@ impl CapabilityFilter {
         F: Fn(&HealthCapability) -> bool + 'static,
     {
         Self::new(CapabilityType::Health, move |caps| {
-            caps.health
-                .as_ref()
-                .map(|h| predicate(h))
-                .unwrap_or(false)
+            caps.health.as_ref().map(|h| predicate(h)).unwrap_or(false)
         })
     }
 
@@ -81,10 +78,7 @@ impl CapabilityFilter {
         F: Fn(&PowerCapability) -> bool + 'static,
     {
         Self::new(CapabilityType::Power, move |caps| {
-            caps.power
-                .as_ref()
-                .map(|p| predicate(p))
-                .unwrap_or(false)
+            caps.power.as_ref().map(|p| predicate(p)).unwrap_or(false)
         })
     }
 
@@ -93,10 +87,7 @@ impl CapabilityFilter {
         F: Fn(&DisplayCapability) -> bool + 'static,
     {
         Self::new(CapabilityType::Display, move |caps| {
-            caps.display
-                .as_ref()
-                .map(|d| predicate(d))
-                .unwrap_or(false)
+            caps.display.as_ref().map(|d| predicate(d)).unwrap_or(false)
         })
     }
 
@@ -105,10 +96,7 @@ impl CapabilityFilter {
         F: Fn(&AudioCapability) -> bool + 'static,
     {
         Self::new(CapabilityType::Audio, move |caps| {
-            caps.audio
-                .as_ref()
-                .map(|a| predicate(a))
-                .unwrap_or(false)
+            caps.audio.as_ref().map(|a| predicate(a)).unwrap_or(false)
         })
     }
 
@@ -250,12 +238,8 @@ impl DeviceQuery {
         }
 
         match self.combine_mode {
-            CombineMode::All => {
-                self.filters.iter().all(|f| f.check_capability(caps))
-            }
-            CombineMode::Any => {
-                self.filters.iter().any(|f| f.check_capability(caps))
-            }
+            CombineMode::All => self.filters.iter().all(|f| f.check_capability(caps)),
+            CombineMode::Any => self.filters.iter().any(|f| f.check_capability(caps)),
         }
     }
 }

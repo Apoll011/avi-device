@@ -1,4 +1,4 @@
-use avi_p2p::{AviP2p, AviP2pConfig, AviEvent};
+use avi_p2p::{AviEvent, AviP2p, AviP2pConfig};
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -36,7 +36,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Main event loop
     while let Some(event) = event_rx.recv().await {
         match event {
-            AviEvent::Started { local_peer_id, listen_addresses } => {
+            AviEvent::Started {
+                local_peer_id,
+                listen_addresses,
+            } => {
                 println!("🟢 Node Started: {}", local_peer_id);
                 println!("   Listening on: {:?}", listen_addresses);
             }

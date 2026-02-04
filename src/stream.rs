@@ -1,8 +1,8 @@
-use avi_p2p::{AviP2pHandle, StreamId, PeerId, StreamCloseReason};
+use async_trait::async_trait;
+use avi_p2p::{AviP2pHandle, PeerId, StreamCloseReason, StreamId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use async_trait::async_trait;
 
 pub struct StreamContext {
     pub handle: AviP2pHandle,
@@ -32,7 +32,6 @@ pub trait StreamHandler: Send + Sync {
 
 #[async_trait]
 pub trait StreamHandlerFactory: Send + Sync {
-
     async fn create_handler(&self) -> Box<dyn StreamHandler>;
 }
 
@@ -89,7 +88,10 @@ impl StreamDispatcher {
 
             Ok(())
         } else {
-            println!("❌ Refusing stream {} (unknown reason: {})", stream_id, reason);
+            println!(
+                "❌ Refusing stream {} (unknown reason: {})",
+                stream_id, reason
+            );
 
             self.handle
                 .refuse_stream(stream_id, "not_handled".to_string())
@@ -183,7 +185,8 @@ impl StreamDispatcher {
         let factories = self.factories.read().await;
 
         if let Some(factory) = factories.get(&reason) {
-            let stream_id = self.handle
+            let stream_id = self
+                .handle
                 .request_stream(peer_id.clone(), reason.clone())
                 .await
                 .map_err(|e| format!("Failed to request stream: {}", e))?;

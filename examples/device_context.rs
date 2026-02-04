@@ -27,11 +27,13 @@ async fn main() -> Result<(), String> {
 
     // 4. Update nested context
     println!("📝 Updating volume...");
-    device.update_ctx("avi.device.audio.volume", json!(75))
+    device
+        .update_ctx("avi.device.audio.volume", json!(75))
         .await
         .map_err(|e| e.to_string())?;
 
-    device.update_ctx("avi.device.audio.muted", json!(false))
+    device
+        .update_ctx("avi.device.audio.muted", json!(false))
         .await
         .map_err(|e| e.to_string())?;
 
@@ -39,32 +41,41 @@ async fn main() -> Result<(), String> {
     sleep(Duration::from_millis(500)).await;
 
     // 5. Retrieve values
-    let volume = device.get_ctx("avi.device.audio.volume")
+    let volume = device
+        .get_ctx("avi.device.audio.volume")
         .await
         .map_err(|e| e.to_string())?;
     println!("🔈 Current Volume: {}", volume);
 
     // 6. Update whole object
     println!("📝 Updating status object...");
-    device.update_ctx("avi.device.status", json!({
-        "online": true,
-        "battery": 92,
-        "mode": "active"
-    })).await.map_err(|e| e.to_string())?;
+    device
+        .update_ctx(
+            "avi.device.status",
+            json!({
+                "online": true,
+                "battery": 92,
+                "mode": "active"
+            }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
     sleep(Duration::from_millis(500)).await;
 
     // 7. Get nested value from the object we just uploaded
-    let battery = device.get_ctx("avi.device.status.battery")
+    let battery = device
+        .get_ctx("avi.device.status.battery")
         .await
         .map_err(|e| e.to_string())?;
     println!("🔋 Battery Level: {}%", battery);
 
     // 8. Get full context
-    let full_ctx = device.get_ctx("")
-        .await
-        .map_err(|e| e.to_string())?;
-    println!("📊 Full Context: {}", serde_json::to_string_pretty(&full_ctx).unwrap());
+    let full_ctx = device.get_ctx("").await.map_err(|e| e.to_string())?;
+    println!(
+        "📊 Full Context: {}",
+        serde_json::to_string_pretty(&full_ctx).unwrap()
+    );
 
     println!("✅ Context example finished.");
     Ok(())

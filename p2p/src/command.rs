@@ -1,77 +1,77 @@
+use crate::error::AviP2pError;
+use crate::events::PeerId;
+use crate::StreamId;
 use serde_json::Value;
 use tokio::sync::oneshot;
-use crate::events::{PeerId};
-use crate::error::AviP2pError;
-use crate::StreamId;
 
 #[derive(Debug)]
 pub enum Command {
     // PubSub
     Subscribe {
         topic: String,
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
     Unsubscribe {
         topic: String,
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
     Publish {
         topic: String,
         data: Vec<u8>,
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
 
     RequestStream {
         peer_id: PeerId,
         reason: String,
-        respond_to: oneshot::Sender<Result<StreamId, AviP2pError>>
+        respond_to: oneshot::Sender<Result<StreamId, AviP2pError>>,
     },
     AcceptStream {
         stream_id: StreamId,
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
     RejectStream {
         stream_id: StreamId,
         reason: String,
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
     SendStreamData {
         stream_id: StreamId,
         data: Vec<u8>,
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
     CloseStream {
         stream_id: StreamId,
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
 
     // Queries
     GetConnectedPeers {
-        respond_to: oneshot::Sender<Result<Vec<PeerId>, AviP2pError>>
+        respond_to: oneshot::Sender<Result<Vec<PeerId>, AviP2pError>>,
     },
     DiscoverPeers {
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
 
     // Lifecycle
     #[allow(dead_code)]
     Shutdown {
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
 
     UpdateSelfContext {
         patch: Value, // JSON partial update
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
 
     ReplaceSelfContext {
         data: Value, // JSON full replacement
-        respond_to: oneshot::Sender<Result<(), AviP2pError>>
+        respond_to: oneshot::Sender<Result<(), AviP2pError>>,
     },
 
     GetPeerContext {
         #[allow(dead_code)]
         peer_id: Option<PeerId>,
-        respond_to: oneshot::Sender<Result<Value, AviP2pError>>
+        respond_to: oneshot::Sender<Result<Value, AviP2pError>>,
     },
 }

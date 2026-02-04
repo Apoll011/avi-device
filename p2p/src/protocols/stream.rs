@@ -1,19 +1,16 @@
-use libp2p::request_response::Codec;
 use async_trait::async_trait;
 use futures::prelude::*;
+use libp2p::request_response::Codec;
+use libp2p::PeerId as LibPeerId;
 use serde::{Deserialize, Serialize};
-use std::{fmt, io};
 use std::sync::atomic::AtomicU64;
-use libp2p::{
-    PeerId as LibPeerId
-};
+use std::{fmt, io};
 
 static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
 
 pub fn generate_stream_id() -> StreamId {
     StreamId(NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst))
 }
-
 
 pub enum StreamStatus {
     Requested,
@@ -76,11 +73,7 @@ impl Codec for AviStreamCodec {
     type Request = StreamMessage;
     type Response = ();
 
-    async fn read_request<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-    ) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -91,14 +84,16 @@ impl Codec for AviStreamCodec {
 
         // Sanity check length (e.g. 10MB max)
         if len > 10 * 1024 * 1024 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Message too large"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Message too large",
+            ));
         }
 
         let mut buffer = vec![0u8; len];
         io.read_exact(&mut buffer).await?;
 
-        serde_json::from_slice(&buffer)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        serde_json::from_slice(&buffer).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 
     async fn read_response<T>(
@@ -121,8 +116,8 @@ impl Codec for AviStreamCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let encoded = serde_json::to_vec(&req)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let encoded =
+            serde_json::to_vec(&req).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         let len = (encoded.len() as u32).to_be_bytes();
         io.write_all(&len).await?;

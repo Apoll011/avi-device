@@ -1,6 +1,6 @@
-use thiserror::Error;
-use crate::events::{PeerId};
+use crate::events::PeerId;
 use crate::StreamId;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
 pub enum AviP2pError {
@@ -35,11 +35,10 @@ pub enum AviP2pError {
     Serialization(String),
 
     #[error("Serialization Path Error: {0}")]
-    InvalidPath(String)
+    InvalidPath(String),
 }
 
-impl AviP2pError {
-}
+impl AviP2pError {}
 
 #[derive(Debug, Clone)]
 pub enum StreamCloseReason {

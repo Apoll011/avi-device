@@ -345,24 +345,33 @@ mod tests {
                     throughput_mbps: 800,
                 },
             })
-            .sensor("microphone", SensorCapability::Microphone {
-                present: true,
-                array_size: 4,
-                sampling_rate_khz: 48,
-                max_spl_db: 120,
-            })
-            .sensor("temperature", SensorCapability::Temperature {
-                present: true,
-                accuracy_celsius: 0.5,
-                current_value: Some(22.5),
-            })
-            .connectivity("wifi", ConnectivityCapability::Wifi {
-                present: true,
-                standards: vec!["802.11ax".to_string(), "802.11ac".to_string()],
-                bands: vec!["2.4".to_string(), "5".to_string()],
-                mimo_streams: 2,
-                rssi_dbm: Some(-65),
-            })
+            .sensor(
+                "microphone",
+                SensorCapability::Microphone {
+                    present: true,
+                    array_size: 4,
+                    sampling_rate_khz: 48,
+                    max_spl_db: 120,
+                },
+            )
+            .sensor(
+                "temperature",
+                SensorCapability::Temperature {
+                    present: true,
+                    accuracy_celsius: 0.5,
+                    current_value: Some(22.5),
+                },
+            )
+            .connectivity(
+                "wifi",
+                ConnectivityCapability::Wifi {
+                    present: true,
+                    standards: vec!["802.11ax".to_string(), "802.11ac".to_string()],
+                    bands: vec!["2.4".to_string(), "5".to_string()],
+                    mimo_streams: 2,
+                    rssi_dbm: Some(-65),
+                },
+            )
             .power(PowerCapability {
                 source: PowerSource::Battery,
                 battery_pct: Some(85),
@@ -378,7 +387,10 @@ mod tests {
                 memory_pressure_pct: 40,
                 network_stability_pct: 98,
             })
-            .extended("device_orientation", ExtendedCapability::Text("landscape".to_string()))
+            .extended(
+                "device_orientation",
+                ExtendedCapability::Text("landscape".to_string()),
+            )
             .extended("attention_detection", ExtendedCapability::Boolean(true))
             .build();
 

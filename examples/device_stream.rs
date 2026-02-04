@@ -1,6 +1,9 @@
-use avi_device::device::{AviDevice, AviDeviceConfig, AviDeviceType};
-use avi_device::{DeviceCapabilities, StreamHandler, StreamHandlerFactory, StreamContext, PeerId, StreamId, StreamCloseReason};
 use async_trait::async_trait;
+use avi_device::device::{AviDevice, AviDeviceConfig, AviDeviceType};
+use avi_device::{
+    DeviceCapabilities, PeerId, StreamCloseReason, StreamContext, StreamHandler,
+    StreamHandlerFactory, StreamId,
+};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -14,7 +17,10 @@ impl StreamHandler for ChatStreamHandler {
     }
 
     async fn on_rejected(&mut self, peer_id: PeerId, stream_id: StreamId, reason: String) {
-        println!("❌ Stream {} rejected by {}. Reason: {}", stream_id, peer_id, reason);
+        println!(
+            "❌ Stream {} rejected by {}. Reason: {}",
+            stream_id, peer_id, reason
+        );
     }
 
     async fn on_data(&mut self, ctx: &StreamContext, data: Vec<u8>) {
@@ -23,7 +29,10 @@ impl StreamHandler for ChatStreamHandler {
     }
 
     async fn on_closed(&mut self, peer_id: PeerId, stream_id: StreamId, reason: StreamCloseReason) {
-        println!("🔇 Stream {} with {} closed. Reason: {:?}", stream_id, peer_id, reason);
+        println!(
+            "🔇 Stream {} with {} closed. Reason: {:?}",
+            stream_id, peer_id, reason
+        );
     }
 }
 
@@ -55,14 +64,16 @@ async fn main() -> Result<(), String> {
 
     // 4. Register the stream handler for a specific "reason"
     println!("🔧 Registering 'chat' stream handler...");
-    device.register_stream_handler("chat".to_string(), ChatStreamFactory).await;
+    device
+        .register_stream_handler("chat".to_string(), ChatStreamFactory)
+        .await;
 
     println!("🚀 Device ready. In a real scenario, another peer would request a 'chat' stream.");
     println!("Waiting 5 seconds before finishing the example...");
-    
-    // In this single-node example, we can't easily request a stream to ourselves 
+
+    // In this single-node example, we can't easily request a stream to ourselves
     // unless we have another node. But we've demonstrated the setup.
-    
+
     sleep(Duration::from_secs(5)).await;
 
     println!("✅ Stream example finished.");

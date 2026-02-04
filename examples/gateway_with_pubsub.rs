@@ -1,5 +1,5 @@
-use avi_p2p::{AviP2p, AviP2pConfig, AviEvent};
-use avi_p2p::bridge::{EmbeddedBridge, BridgeConfig};
+use avi_p2p::bridge::{BridgeConfig, EmbeddedBridge};
+use avi_p2p::{AviEvent, AviP2p, AviP2pConfig};
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -22,10 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start the UDP Bridge on Port 8888
     println!("🌉 Starting UDP Bridge on port 8888...");
-    EmbeddedBridge::start(
-        gateway_handle.clone(),
-        BridgeConfig { udp_port: 8888 }
-    ).await?;
+    EmbeddedBridge::start(gateway_handle.clone(), BridgeConfig { udp_port: 8888 }).await?;
 
     println!("✅ Bridge listening on UDP 0.0.0.0:8888");
     println!("\n📝 Embedded devices can now connect to this gateway");
@@ -67,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ==========================================
     // EVENT MONITORING LOOP
     // ==========================================
-    
+
     // Spawn gateway event handler
     tokio::spawn(async move {
         while let Some(event) = gateway_events.recv().await {
@@ -100,13 +97,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match event {
             AviEvent::Message { from, topic, data } => {
                 message_count += 1;
-                
+
                 println!("┌─────────────────────────────────────────────");
                 println!("│ [MONITOR] Message #{}", message_count);
                 println!("├─────────────────────────────────────────────");
                 println!("│ 📡 From: {}", from);
                 println!("│ 📋 Topic: {}", topic);
-                
+
                 // Try to parse as JSON for prettier output
                 if let Ok(json_str) = String::from_utf8(data.clone()) {
                     if json_str.trim().starts_with('{') {

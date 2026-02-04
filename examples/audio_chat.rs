@@ -1,12 +1,16 @@
-use avi_p2p::{AviP2p, AviP2pConfig, AviEvent, AviP2pHandle, StreamId, PeerId};
-use tokio::io::{self, AsyncBufReadExt};
-use tokio::time::{sleep, Duration};
+use avi_p2p::{AviEvent, AviP2p, AviP2pConfig, AviP2pHandle, PeerId, StreamId};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tokio::io::{self, AsyncBufReadExt};
+use tokio::time::{sleep, Duration};
 
 /// Simulates capturing audio from a microphone and sending it over the network.
 /// Sends ~1KB of data every 50ms (simulating 20Hz updates).
-async fn run_simulated_microphone(handle: AviP2pHandle, stream_id: StreamId, active: Arc<AtomicBool>) {
+async fn run_simulated_microphone(
+    handle: AviP2pHandle,
+    stream_id: StreamId,
+    active: Arc<AtomicBool>,
+) {
     println!("🎙️  Microphone ACTIVE for Stream {}", stream_id);
     let mut packet_count = 0u64;
 
@@ -53,19 +57,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 AviEvent::Started { local_peer_id, .. } => {
                     println!("✅ Node Online. My ID: {}", local_peer_id);
-                },
+                }
                 AviEvent::PeerConnected { peer_id, .. } => {
                     println!("🔗 CONNECTED to {}. Ready to call.", peer_id);
-                },
+                }
                 AviEvent::PeerDisconnected { peer_id } => {
                     println!("🔌 Disconnected from {}", peer_id);
-                },
+                }
 
                 // --- Audio Logic ---
 
                 // Case A: Someone is calling us
-                AviEvent::StreamRequested { from, stream_id, reason } => {
-                    println!("\n📞 INCOMING CALL from {} reason: {} (Stream {})", from, reason, stream_id);
+                AviEvent::StreamRequested {
+                    from,
+                    stream_id,
+                    reason,
+                } => {
+                    println!(
+                        "\n📞 INCOMING CALL from {} reason: {} (Stream {})",
+                        from, reason, stream_id
+                    );
                     println!("   Auto-accepting call...");
 
                     if let Err(e) = handle_clone.accept_stream(stream_id).await {
@@ -80,11 +91,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             run_simulated_microphone(h, stream_id, ac).await;
                         });
                     }
-                },
+                }
 
                 // Case B: We called someone and they accepted
                 AviEvent::StreamAccepted { peer_id, stream_id } => {
-                    println!("\n✅ CALL ESTABLISHED with {} (Stream {})", peer_id, stream_id);
+                    println!(
+                        "\n✅ CALL ESTABLISHED with {} (Stream {})",
+                        peer_id, stream_id
+                    );
                     // Start sending our audio
                     active_call_clone.store(true, Ordering::Relaxed);
                     let h = handle_clone.clone();
@@ -92,27 +106,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tokio::spawn(async move {
                         run_simulated_microphone(h, stream_id, ac).await;
                     });
-                },
+                }
 
                 // Case C: Receiving Audio Data
-                AviEvent::StreamData { from, stream_id, data } => {
+                AviEvent::StreamData {
+                    from,
+                    stream_id,
+                    data,
+                } => {
                     // Extract the packet count we put in earlier
                     let mut count_bytes = [0u8; 8];
                     if data.len() >= 8 {
                         count_bytes.copy_from_slice(&data[0..8]);
                         let seq = u64::from_be_bytes(count_bytes);
                         // Print on same line to avoid spamming
-                        print!("\r🔊 Hearing {} [Stream {}] | Pkt #{} | Size: {}b   ", from, stream_id, seq, data.len());
+                        print!(
+                            "\r🔊 Hearing {} [Stream {}] | Pkt #{} | Size: {}b   ",
+                            from,
+                            stream_id,
+                            seq,
+                            data.len()
+                        );
                         use std::io::Write;
                         let _ = std::io::stdout().flush();
                     }
-                },
+                }
 
                 // Case D: Call Ended
-                AviEvent::StreamClosed { peer_id, stream_id, reason } => {
-                    println!("\n❌ Call with {} ended (Stream {}). Reason: {:?}", peer_id, stream_id, reason);
+                AviEvent::StreamClosed {
+                    peer_id,
+                    stream_id,
+                    reason,
+                } => {
+                    println!(
+                        "\n❌ Call with {} ended (Stream {}). Reason: {:?}",
+                        peer_id, stream_id, reason
+                    );
                     active_call_clone.store(false, Ordering::Relaxed);
-                },
+                }
 
                 _ => {} // Ignore PubSub/Discovery events
             }
@@ -129,33 +160,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
     while let Ok(Some(line)) = stdin.next_line().await {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.is_empty() { continue; }
+        if parts.is_empty() {
+            continue;
+        }
 
         match parts[0] {
             "call" if parts.len() > 2 => {
                 let target = PeerId::new(parts[1]);
                 println!("📞 Dialing {}...", target);
-                match handle.request_stream(target,  parts[2].to_string()).await {
+                match handle.request_stream(target, parts[2].to_string()).await {
                     Ok(id) => println!("   Request sent. Stream ID: {}", id),
                     Err(e) => eprintln!("   Failed to request call: {}", e),
                 }
-            },
+            }
             "hangup" if parts.len() > 1 => {
                 if let Ok(id) = parts[1].parse::<u64>() {
                     active_call.store(false, Ordering::Relaxed);
                     let _ = handle.close_stream(StreamId(id)).await;
                     println!("   Hung up stream {}", id);
                 }
-            },
-            "peers" => {
-                match handle.connected_peers().await {
-                    Ok(peers) => {
-                        println!("--- Connected Peers ---");
-                        for p in peers { println!("  {}", p); }
-                        println!("-----------------------");
+            }
+            "peers" => match handle.connected_peers().await {
+                Ok(peers) => {
+                    println!("--- Connected Peers ---");
+                    for p in peers {
+                        println!("  {}", p);
                     }
-                    Err(e) => eprintln!("Error fetching peers: {}", e),
+                    println!("-----------------------");
                 }
+                Err(e) => eprintln!("Error fetching peers: {}", e),
             },
             "quit" => break,
             _ => println!("Unknown command"),

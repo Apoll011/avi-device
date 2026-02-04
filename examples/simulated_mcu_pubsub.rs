@@ -1,8 +1,8 @@
-use avi_p2p_embedded::{AviEmbedded, AviEmbeddedConfig, UdpClient, MessageHandler};
+use avi_p2p_embedded::{AviEmbedded, AviEmbeddedConfig, MessageHandler, UdpClient};
 use avi_p2p_protocol::{PressType, SensorValue};
-use tokio::net::UdpSocket;
-use std::net::SocketAddr;
 use std::io;
+use std::net::SocketAddr;
+use tokio::net::UdpSocket;
 
 // --- MOCK HARDWARE LAYER ---
 struct PcSocket {
@@ -15,7 +15,10 @@ impl PcSocket {
         let sock = UdpSocket::bind(bind_addr).await?;
         sock.set_nonblocking(true)?;
         let target = target_addr.parse().unwrap();
-        Ok(Self { inner: sock, target })
+        Ok(Self {
+            inner: sock,
+            target,
+        })
     }
 }
 
@@ -46,10 +49,10 @@ struct DeviceMessageHandler {
 impl MessageHandler for DeviceMessageHandler {
     fn on_message(&mut self, topic: &str, data: &[u8]) {
         println!("📨 [Device {}] Message on topic: {}", self.device_id, topic);
-        
+
         if let Ok(msg) = std::str::from_utf8(data) {
             println!("   Content: {}", msg);
-            
+
             // Handle commands
             if topic.contains("/command") {
                 match msg.trim() {
@@ -93,15 +96,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Subscribe to Topics
     println!("📥 Subscribing to topics...");
-    
+
     // Subscribe to commands for this device
-    mcu.subscribe(&format!("avi/home/device_{}/command", device_id)).await?;
+    mcu.subscribe(&format!("avi/home/device_{}/command", device_id))
+        .await?;
     println!("   ✓ Subscribed to device commands");
-    
+
     // Subscribe to broadcasts
     mcu.subscribe("avi/home/broadcast").await?;
     println!("   ✓ Subscribed to broadcast messages");
-    
+
     // Subscribe to other devices' sensor data (for monitoring)
     mcu.subscribe("avi/home/+/sensor/#").await?;
     println!("   ✓ Subscribed to all sensor updates\n");
@@ -127,24 +131,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Simulate temperature reading
             let temp = 20.0 + (counter as f32 * 0.2) % 15.0;
             println!("🌡️  [MCU] Temperature: {:.1}°C", temp);
-            mcu.update_sensor("kitchen_temp", SensorValue::Temperature(temp)).await?;
+            mcu.update_sensor("kitchen_temp", SensorValue::Temperature(temp))
+                .await?;
         }
 
         if counter % 50 == 0 {
             // Publish custom message
-            let status = format!(r#"{{"device_id":{},"uptime":{},"status":"ok"}}"#, device_id, counter);
+            let status = format!(
+                r#"{{"device_id":{},"uptime":{},"status":"ok"}}"#,
+                device_id, counter
+            );
             println!("📤 [MCU] Publishing status...");
             mcu.publish(
                 &format!("avi/home/device_{}/status", device_id),
-                status.as_bytes()
-            ).await?;
+                status.as_bytes(),
+            )
+            .await?;
         }
 
         if counter % 40 == 0 {
             // Simulate humidity reading
             let humidity = 45.0 + (counter as f32 * 0.15) % 30.0;
             println!("💧 [MCU] Humidity: {:.1}%", humidity);
-            mcu.update_sensor("kitchen_humidity", SensorValue::Humidity(humidity)).await?;
+            mcu.update_sensor("kitchen_humidity", SensorValue::Humidity(humidity))
+                .await?;
         }
 
         counter += 1;

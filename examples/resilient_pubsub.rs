@@ -1,4 +1,4 @@
-use avi_p2p::{AviP2p, AviP2pConfig, AviEvent};
+use avi_p2p::{AviEvent, AviP2p, AviP2pConfig};
 use std::time::Duration;
 
 #[tokio::main]
@@ -24,7 +24,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let msg = format!("Heartbeat #{}", count);
 
             // Fail-fast handling: If the network layer dies, this returns an error
-            match pub_handle.publish("system-status", msg.as_bytes().to_vec()).await {
+            match pub_handle
+                .publish("system-status", msg.as_bytes().to_vec())
+                .await
+            {
                 Ok(_) => println!("Sent: {}", msg),
                 Err(e) => eprintln!("Failed to publish: {}", e),
             }
